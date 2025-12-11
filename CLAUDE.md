@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is "Wheeler" - a comprehensive financial portfolio tracking system built with Go. The project specializes in tracking sophisticated options trading strategies, particularly the "wheel strategy" (cash-secured puts, covered calls, and stock assignments), along with comprehensive portfolio management including Treasury securities collateral management.
 
+**Important Note on Terminology**: Wheeler is **not a game** - it is serious financial software. The "Wheel" refers to the "Wheel Strategy" in options trading, not gaming mechanics. All feature development should use proper financial and trading terminology (e.g., "position lifecycle", "option assignment", "trade completion") rather than gaming terms (e.g., "game ending", "game mechanics").
+
 ## Applications
 
 The project contains one main application:

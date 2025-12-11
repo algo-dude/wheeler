@@ -2,6 +2,8 @@
 
 A web-based portfolio tracking system built with Go, specializing in options trading strategies (particularly the "wheel strategy"), Treasury collateral management, and comprehensive portfolio analytics with fancy visualizations.
 
+> **Note**: Wheeler is a serious financial portfolio tracking application, not a game. The "Wheel" refers to the "Wheel Strategy" in options trading - a sophisticated approach involving cash-secured puts, stock assignments, and covered calls.
+
 ⚠️ Disclaimer
 
 This tool is for educational and research purposes only. Wheeler does not provide investment advice, recommendations, or financial guidance. All information provided is for informational purposes only and should not be considered as investment advice. Always consult with a qualified financial advisor before making any investment decisions. Past performance does not guarantee future results. Trading and investing involve risk of loss.
