@@ -3,7 +3,7 @@ services:
     build: .
     container_name: wheeler
     ports:
-      # External port 8077 (Unraid-friendly, avoids SABnzbd conflict)
+      # External port 8077 (Unraid-friendly)
       # Internal port 8080 (Go web server)
       - "8077:8080"
     volumes:
