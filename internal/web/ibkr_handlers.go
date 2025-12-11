@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 )
 
 // IBKRSettingsData holds data for the IBKR settings template
@@ -113,10 +114,10 @@ func (s *Server) ibkrTestHandler(w http.ResponseWriter, r *http.Request) {
 				s.settingService.SetValue("IBKR_TWS_HOST", config.Host, "IBKR TWS/Gateway hostname")
 			}
 			if config.Port > 0 {
-				s.settingService.SetValue("IBKR_TWS_PORT", string(rune(config.Port)), "IBKR TWS/Gateway port")
+				s.settingService.SetValue("IBKR_TWS_PORT", strconv.Itoa(config.Port), "IBKR TWS/Gateway port")
 			}
 			if config.ClientID > 0 {
-				s.settingService.SetValue("IBKR_CLIENT_ID", string(rune(config.ClientID)), "IBKR client ID")
+				s.settingService.SetValue("IBKR_CLIENT_ID", strconv.Itoa(config.ClientID), "IBKR client ID")
 			}
 		}
 	}
