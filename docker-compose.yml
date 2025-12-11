@@ -13,6 +13,28 @@ services:
       # - Windows: C:/wheeler/data:/app/data
       - ./data:/app/data
     restart: unless-stopped
-    # Optional: uncomment to set environment variables
-    # environment:
-    #   - POLYGON_API_KEY=your_api_key_here
+    environment:
+      # IBKR service URL for Wheeler to communicate with
+      - IBKR_SERVICE_URL=http://ibkr-service:8081
+      # Optional: uncomment to set environment variables
+      # - POLYGON_API_KEY=your_api_key_here
+    depends_on:
+      - ibkr-service
+
+  ibkr-service:
+    build: ./ibkr_service
+    container_name: ibkr-service
+    ports:
+      # External port 8081 for direct API access (optional)
+      - "8081:8081"
+    volumes:
+      # Share the same data volume for SQLite database access
+      - ./data:/app/data
+    restart: unless-stopped
+    environment:
+      # TWS/Gateway connection settings
+      # Update IBKR_TWS_HOST to your TWS/Gateway IP address
+      - IBKR_TWS_HOST=host.docker.internal
+      - IBKR_TWS_PORT=7497
+      - IBKR_CLIENT_ID=1
+      - IBKR_DATABASE_PATH=/app/data/wheeler.db

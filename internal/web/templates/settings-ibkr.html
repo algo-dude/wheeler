@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IBKR Integration - Wheeler</title>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="settings-page">
+    <div class="app-container">
+        {{template "_navigation.html" .}}
+        
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="content-section">
+                <div class="section-title">Interactive Brokers</div>
+                <div class="section-subtitle">Connect to TWS or Gateway for automatic position sync</div>
+                
+                <!-- Connection Configuration Form -->
+                <div class="settings-form-container">
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <i class="fas fa-building"></i>
+                            <h3>TWS/Gateway Connection</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <form id="ibkrConfigForm">
+                                <div class="form-row">
+                                    <div class="form-group form-group-half">
+                                        <label for="twsHost" class="form-label">Host</label>
+                                        <input type="text" id="twsHost" class="form-input" 
+                                               placeholder="127.0.0.1"
+                                               value="{{.TWS_Host}}">
+                                        <div class="form-help">
+                                            <i class="fas fa-info-circle"></i>
+                                            TWS/Gateway hostname or IP address
+                                        </div>
+                                    </div>
+                                    <div class="form-group form-group-quarter">
+                                        <label for="twsPort" class="form-label">Port</label>
+                                        <input type="number" id="twsPort" class="form-input" 
+                                               placeholder="7497"
+                                               value="{{.TWS_Port}}">
+                                        <div class="form-help">
+                                            <i class="fas fa-info-circle"></i>
+                                            7497 (TWS paper), 7496 (TWS live), 4002 (Gateway)
+                                        </div>
+                                    </div>
+                                    <div class="form-group form-group-quarter">
+                                        <label for="clientId" class="form-label">Client ID</label>
+                                        <input type="number" id="clientId" class="form-input" 
+                                               placeholder="1"
+                                               value="{{.ClientID}}">
+                                        <div class="form-help">
+                                            <i class="fas fa-info-circle"></i>
+                                            Unique client identifier
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <div class="form-actions">
+                                        <button type="submit" class="btn btn-primary" id="saveConfigBtn">
+                                            <i class="fas fa-save"></i>
+                                            Save Configuration
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                            
+                            <!-- Connection Status -->
+                            <div class="api-status" id="connectionStatus">
+                                <div class="status-indicator">
+                                    <i class="fas fa-circle" id="statusIcon"></i>
+                                    <span id="statusText">Checking status...</span>
+                                </div>
+                                <div class="status-description" id="statusDescription">
+                                    Loading connection status...
+                                </div>
+                            </div>
+                            
+                            <!-- Connection Actions -->
+                            <div class="api-actions">
+                                <button type="button" class="btn btn-secondary" id="testConnectionBtn">
+                                    <i class="fas fa-flask"></i>
+                                    Test Connection
+                                </button>
+                                <button type="button" class="btn btn-primary" id="syncPositionsBtn">
+                                    <i class="fas fa-sync-alt"></i>
+                                    Sync Positions
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="disconnectBtn">
+                                    <i class="fas fa-plug"></i>
+                                    Disconnect
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sync Results -->
+                <div class="settings-form-container" id="syncResultsContainer" style="display: none;">
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <i class="fas fa-list-check"></i>
+                            <h3>Last Sync Results</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="sync-results" id="syncResults">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- IBKR Information -->
+                <div class="info-section">
+                    <div class="info-card">
+                        <div class="info-header">
+                            <i class="fas fa-lightbulb"></i>
+                            <h4>About IBKR Integration</h4>
+                        </div>
+                        <div class="info-content">
+                            <p>Wheeler connects to Interactive Brokers TWS (Trader Workstation) or IB Gateway to automatically sync your positions.</p>
+                            <ul>
+                                <li><strong>TWS Paper Trading:</strong> Port 7497 (default)</li>
+                                <li><strong>TWS Live Trading:</strong> Port 7496</li>
+                                <li><strong>IB Gateway Paper:</strong> Port 4002</li>
+                                <li><strong>IB Gateway Live:</strong> Port 4001</li>
+                            </ul>
+                            <p><strong>Requirements:</strong></p>
+                            <ul>
+                                <li>TWS or IB Gateway must be running and logged in</li>
+                                <li>API connections must be enabled in TWS/Gateway settings</li>
+                                <li>If using Docker, ensure network connectivity to TWS host</li>
+                            </ul>
+                            <p>The sync will import all stock and option positions from your IBKR account into Wheeler for tracking and analysis.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include Shared Symbol Modal -->
+    {{template "_symbol_modal.html"}}
+
+    <style>
+        .settings-form-container {
+            max-width: 700px;
+            margin: 20px 0;
+        }
+
+        .settings-card {
+            background: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .settings-card-header {
+            padding: 20px;
+            border-bottom: 1px solid #404040;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .settings-card-header i {
+            color: #3498db;
+            font-size: 18px;
+        }
+
+        .settings-card-header h3 {
+            margin: 0;
+            color: #e0e0e0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .settings-card-body {
+            padding: 20px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .form-group-half {
+            flex: 1 1 45%;
+            min-width: 200px;
+        }
+
+        .form-group-quarter {
+            flex: 1 1 20%;
+            min-width: 100px;
+        }
+
+        .form-help {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .api-status {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1e1e1e;
+            border-radius: 6px;
+            border-left: 4px solid #666;
+        }
+
+        .api-status.connected {
+            border-left-color: #27ae60;
+        }
+
+        .api-status.disconnected {
+            border-left-color: #e74c3c;
+        }
+
+        .api-status.checking {
+            border-left-color: #f39c12;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+        }
+
+        .status-indicator i {
+            font-size: 8px;
+        }
+
+        .status-indicator.connected i {
+            color: #27ae60;
+        }
+
+        .status-indicator.disconnected i {
+            color: #e74c3c;
+        }
+
+        .status-indicator.checking i {
+            color: #f39c12;
+        }
+
+        .status-description {
+            font-size: 12px;
+            color: #888;
+            margin-left: 16px;
+        }
+
+        .info-section {
+            max-width: 700px;
+        }
+
+        .info-card {
+            background: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .info-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .info-header i {
+            color: #f39c12;
+            font-size: 16px;
+        }
+
+        .info-header h4 {
+            margin: 0;
+            color: #e0e0e0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .info-content {
+            color: #b0b0b0;
+            line-height: 1.5;
+        }
+
+        .info-content ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+
+        .info-content li {
+            margin: 5px 0;
+        }
+
+        .info-content strong {
+            color: #e0e0e0;
+        }
+
+        .api-actions {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #404040;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .sync-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .sync-stat {
+            background: #1e1e1e;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .sync-stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: #27ae60;
+        }
+
+        .sync-stat-value.error {
+            color: #e74c3c;
+        }
+
+        .sync-stat-label {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+    </style>
+
+    <script>
+        // Check status on load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkStatus();
+        });
+
+        function checkStatus() {
+            const statusIndicator = document.querySelector('.status-indicator');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusText = document.getElementById('statusText');
+            const statusDescription = document.getElementById('statusDescription');
+            const connectionStatus = document.getElementById('connectionStatus');
+            
+            connectionStatus.classList.remove('connected', 'disconnected');
+            connectionStatus.classList.add('checking');
+            statusIndicator.classList.remove('connected', 'disconnected');
+            statusIndicator.classList.add('checking');
+            statusText.textContent = 'Checking status...';
+            statusDescription.textContent = 'Connecting to IBKR service...';
+
+            fetch('/api/ibkr/status')
+                .then(response => response.json())
+                .then(data => {
+                    connectionStatus.classList.remove('checking');
+                    statusIndicator.classList.remove('checking');
+                    
+                    if (data.connected) {
+                        connectionStatus.classList.add('connected');
+                        statusIndicator.classList.add('connected');
+                        statusText.textContent = 'Connected to IBKR';
+                        statusDescription.textContent = 'TWS/Gateway connection is active';
+                    } else {
+                        connectionStatus.classList.add('disconnected');
+                        statusIndicator.classList.add('disconnected');
+                        statusText.textContent = 'Not connected';
+                        statusDescription.textContent = data.service_up === false 
+                            ? 'IBKR service is not running'
+                            : 'Click "Test Connection" to connect to TWS/Gateway';
+                    }
+                    
+                    // Show last sync results if available
+                    if (data.last_sync_result) {
+                        showSyncResults(data.last_sync_result);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking status:', error);
+                    connectionStatus.classList.remove('checking');
+                    connectionStatus.classList.add('disconnected');
+                    statusIndicator.classList.remove('checking');
+                    statusIndicator.classList.add('disconnected');
+                    statusText.textContent = 'Service unavailable';
+                    statusDescription.textContent = 'IBKR microservice is not running. Start it with Docker Compose.';
+                });
+        }
+
+        function showSyncResults(result) {
+            const container = document.getElementById('syncResultsContainer');
+            const resultsDiv = document.getElementById('syncResults');
+            
+            container.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div class="sync-stat">
+                    <div class="sync-stat-value">${result.options_synced || 0}</div>
+                    <div class="sync-stat-label">Options Synced</div>
+                </div>
+                <div class="sync-stat">
+                    <div class="sync-stat-value">${result.positions_synced || 0}</div>
+                    <div class="sync-stat-label">Positions Synced</div>
+                </div>
+                <div class="sync-stat">
+                    <div class="sync-stat-value">${result.options_closed || 0}</div>
+                    <div class="sync-stat-label">Options Closed</div>
+                </div>
+                <div class="sync-stat">
+                    <div class="sync-stat-value">${result.positions_closed || 0}</div>
+                    <div class="sync-stat-label">Positions Closed</div>
+                </div>
+                ${result.errors && result.errors.length > 0 ? `
+                <div class="sync-stat" style="grid-column: span 2;">
+                    <div class="sync-stat-value error">${result.errors.length}</div>
+                    <div class="sync-stat-label">Errors</div>
+                </div>
+                ` : ''}
+            `;
+        }
+
+        // Save configuration
+        document.getElementById('ibkrConfigForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const config = {
+                host: document.getElementById('twsHost').value,
+                port: parseInt(document.getElementById('twsPort').value) || 7497,
+                client_id: parseInt(document.getElementById('clientId').value) || 1
+            };
+            
+            // Save to Wheeler settings
+            Promise.all([
+                fetch('/api/settings/IBKR_TWS_HOST', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: config.host, description: 'IBKR TWS/Gateway hostname' })
+                }),
+                fetch('/api/settings/IBKR_TWS_PORT', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: config.port.toString(), description: 'IBKR TWS/Gateway port' })
+                }),
+                fetch('/api/settings/IBKR_CLIENT_ID', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: config.client_id.toString(), description: 'IBKR client ID' })
+                })
+            ])
+            .then(() => {
+                showNotification('Configuration saved successfully!', 'success');
+            })
+            .catch(error => {
+                console.error('Error saving configuration:', error);
+                showNotification('Error saving configuration: ' + error.message, 'error');
+            });
+        });
+
+        // Test connection
+        document.getElementById('testConnectionBtn').addEventListener('click', function() {
+            const btn = this;
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+            
+            fetch('/api/ibkr/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.connected) {
+                    showNotification('Connection successful! Accounts: ' + (data.accounts || []).join(', '), 'success');
+                    checkStatus();
+                } else {
+                    showNotification('Connection failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error testing connection:', error);
+                showNotification('Error testing connection: ' + error.message, 'error');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        });
+
+        // Sync positions
+        document.getElementById('syncPositionsBtn').addEventListener('click', function() {
+            const btn = this;
+            
+            if (!confirm('This will sync all positions from IBKR to Wheeler. Continue?')) {
+                return;
+            }
+            
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+            
+            fetch('/api/ibkr/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`Sync completed! Options: ${data.options_synced}, Positions: ${data.positions_synced}`, 'success');
+                    showSyncResults(data);
+                } else {
+                    showNotification('Sync failed: ' + (data.errors || []).join(', '), 'error');
+                }
+                checkStatus();
+            })
+            .catch(error => {
+                console.error('Error syncing positions:', error);
+                showNotification('Error syncing positions: ' + error.message, 'error');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        });
+
+        // Disconnect
+        document.getElementById('disconnectBtn').addEventListener('click', function() {
+            const btn = this;
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Disconnecting...';
+            
+            fetch('/api/ibkr/disconnect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Disconnected from IBKR', 'success');
+                } else {
+                    showNotification('Disconnect failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+                checkStatus();
+            })
+            .catch(error => {
+                console.error('Error disconnecting:', error);
+                showNotification('Error disconnecting: ' + error.message, 'error');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        });
+
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerHTML = `
+                <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'}"></i>
+                <span>${message}</span>
+                <button class="notification-close">&times;</button>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => notification.classList.add('show'), 100);
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+            
+            notification.querySelector('.notification-close').addEventListener('click', () => {
+                notification.classList.remove('show');
+                setTimeout(() => notification.remove(), 300);
+            });
+        }
+
+        console.log('IBKR Settings page loaded');
+    </script>
+    <script src="/static/js/navigation.js"></script>
+    <script src="/static/js/symbol-modal.js"></script>
+</body>
+</html>
