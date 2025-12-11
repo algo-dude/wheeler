@@ -2,3 +2,19 @@
 data/backups
 data/test_db.db
 data/wheeler.*
+data/integration_test.db*
+data/currentdb
+
+# Build artifacts
+stonks
+wheeler
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
