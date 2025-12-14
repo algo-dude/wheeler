@@ -441,6 +441,21 @@ func (s *Server) setupRoutes() {
 	http.HandleFunc("/api/polygon/fetch-dividends", s.polygonFetchDividendsHandler)
 	log.Printf("[SERVER] Route registered: /api/polygon/fetch-dividends -> polygonFetchDividendsHandler")
 
+	http.HandleFunc("/settings/ibkr", s.ibkrSettingsHandler)
+	log.Printf("[SERVER] Route registered: /settings/ibkr -> ibkrSettingsHandler")
+
+	http.HandleFunc("/api/ibkr/test", s.ibkrTestHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/test -> ibkrTestHandler")
+
+	http.HandleFunc("/api/ibkr/sync", s.ibkrSyncHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/sync -> ibkrSyncHandler")
+
+	http.HandleFunc("/api/ibkr/status", s.ibkrStatusHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/status -> ibkrStatusHandler")
+
+	http.HandleFunc("/api/ibkr/disconnect", s.ibkrDisconnectHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/disconnect -> ibkrDisconnectHandler")
+
 	log.Printf("[SERVER] All routes registered successfully")
 }
 
