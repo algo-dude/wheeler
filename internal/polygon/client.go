@@ -132,6 +132,7 @@ type Greeks struct {
 	Gamma float64 `json:"gamma"`
 	Theta float64 `json:"theta"`
 	Vega  float64 `json:"vega"`
+	Rho   float64 `json:"rho,omitempty"`
 }
 
 type Quote struct {

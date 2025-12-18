@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"stonks/internal/models"
 	"strings"
 	"time"
@@ -196,7 +197,7 @@ func (s *Service) TestConnection(ctx context.Context) error {
 // GetAPIKeyStatus returns information about the current API key configuration
 func (s *Service) GetAPIKeyStatus() *APIKeyStatus {
 	apiKey := s.settingService.GetValue("POLYGON_API_KEY")
-	
+
 	status := &APIKeyStatus{
 		Configured: apiKey != "",
 		Masked:     "",
@@ -230,7 +231,7 @@ type SymbolInfo struct {
 	PreviousClose float64 `json:"previous_close"`
 	High          float64 `json:"high"`
 	Low           float64 `json:"low"`
-	Volume        float64   `json:"volume"`
+	Volume        float64 `json:"volume"`
 }
 
 // DividendInfo represents dividend information from Polygon
@@ -251,4 +252,120 @@ type APIKeyStatus struct {
 	Masked     string `json:"masked"`
 	Valid      bool   `json:"valid"`
 	Error      string `json:"error,omitempty"`
+}
+
+// OptionGreeks represents Greek values for an option contract
+type OptionGreeks struct {
+	Delta                *float64 `json:"delta,omitempty"`
+	Gamma                *float64 `json:"gamma,omitempty"`
+	Theta                *float64 `json:"theta,omitempty"`
+	Vega                 *float64 `json:"vega,omitempty"`
+	Rho                  *float64 `json:"rho,omitempty"`
+	ImpliedVolatility    *float64 `json:"implied_volatility,omitempty"`
+	UnderlyingPrice      *float64 `json:"underlying_price,omitempty"`
+	Source               string   `json:"source,omitempty"`
+	ContractSymbol       string   `json:"contract_symbol,omitempty"`
+	ExpirationDisplay    string   `json:"expiration_display,omitempty"`
+	ExpirationUnixMillis int64    `json:"expiration_unix_millis,omitempty"`
+}
+
+// buildOptionContractSymbol formats a Polygon option contract string (e.g., O:SPY241220C00450000)
+func buildOptionContractSymbol(option *models.Option) string {
+	if option == nil {
+		return ""
+	}
+
+	datePart := option.Expiration.Format("060102") // YYMMDD
+	typeCode := "P"
+	if strings.EqualFold(option.Type, "Call") {
+		typeCode = "C"
+	}
+
+	// Polygon expects strike * 1000 padded to 8 digits
+	strikeInt := int(math.Round(option.Strike * 1000))
+	strikePart := fmt.Sprintf("%08d", strikeInt)
+
+	return fmt.Sprintf("O:%s%s%s%s", strings.ToUpper(option.Symbol), datePart, typeCode, strikePart)
+}
+
+// computeRho approximates rho using Black-Scholes, falling back to nil if inputs are insufficient
+func computeRho(option *models.Option, underlyingPrice float64, impliedVol float64, riskFree float64) *float64 {
+	if option == nil || underlyingPrice <= 0 || impliedVol <= 0 {
+		return nil
+	}
+
+	// Time to expiration in years
+	timeToExp := option.Expiration.Sub(time.Now()).Hours() / (24 * 365)
+	if timeToExp <= 0 {
+		return nil
+	}
+
+	strike := option.Strike
+	d1 := (math.Log(underlyingPrice/strike) + (riskFree+0.5*impliedVol*impliedVol)*timeToExp) / (impliedVol * math.Sqrt(timeToExp))
+	d2 := d1 - impliedVol*math.Sqrt(timeToExp)
+
+	var rho float64
+	if strings.EqualFold(option.Type, "Call") {
+		rho = strike * timeToExp * math.Exp(-riskFree*timeToExp) * normCDF(d2)
+	} else {
+		rho = -strike * timeToExp * math.Exp(-riskFree*timeToExp) * normCDF(-d2)
+	}
+
+	return &rho
+}
+
+// normCDF calculates the CDF of standard normal distribution
+func normCDF(x float64) float64 {
+	return 0.5 * (1 + math.Erf(x/math.Sqrt2))
+}
+
+// GetOptionGreeks fetches Greeks for a given option using Polygon snapshots
+func (s *Service) GetOptionGreeks(ctx context.Context, option *models.Option) (*OptionGreeks, error) {
+	if option == nil {
+		return nil, fmt.Errorf("option is nil")
+	}
+
+	client, err := s.getClient()
+	if err != nil {
+		return nil, err
+	}
+
+	contractSymbol := buildOptionContractSymbol(option)
+	if contractSymbol == "" {
+		return nil, fmt.Errorf("could not build contract symbol")
+	}
+
+	snapshot, err := client.GetOptionSnapshot(ctx, option.Symbol, contractSymbol)
+	if err != nil {
+		return nil, err
+	}
+
+	greeks := &OptionGreeks{
+		ContractSymbol:       contractSymbol,
+		ExpirationDisplay:    option.Expiration.Format("2006-01-02"),
+		ExpirationUnixMillis: option.Expiration.UnixMilli(),
+		Source:               "polygon",
+	}
+
+	if snapshot != nil {
+		underlying := snapshot.Results.UnderlyingAsset.Price
+		iv := snapshot.Results.ImpliedVolatility
+
+		greeks.UnderlyingPrice = &underlying
+		greeks.ImpliedVolatility = &iv
+
+		greeks.Delta = &snapshot.Results.Greeks.Delta
+		greeks.Gamma = &snapshot.Results.Greeks.Gamma
+		greeks.Theta = &snapshot.Results.Greeks.Theta
+		greeks.Vega = &snapshot.Results.Greeks.Vega
+
+		if snapshot.Results.Greeks.Rho != 0 {
+			rho := snapshot.Results.Greeks.Rho
+			greeks.Rho = &rho
+		} else {
+			greeks.Rho = computeRho(option, underlying, iv, 0.05)
+		}
+	}
+
+	return greeks, nil
 }

@@ -453,6 +453,9 @@ func (s *Server) setupRoutes() {
 	http.HandleFunc("/api/ibkr/status", s.ibkrStatusHandler)
 	log.Printf("[SERVER] Route registered: /api/ibkr/status -> ibkrStatusHandler")
 
+	http.HandleFunc("/api/ibkr/owned-options", s.ibkrOwnedOptionsHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/owned-options -> ibkrOwnedOptionsHandler")
+
 	http.HandleFunc("/api/ibkr/disconnect", s.ibkrDisconnectHandler)
 	log.Printf("[SERVER] Route registered: /api/ibkr/disconnect -> ibkrDisconnectHandler")
 

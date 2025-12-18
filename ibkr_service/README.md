@@ -12,6 +12,7 @@ This microservice connects to Interactive Brokers TWS (Trader Workstation) or IB
 - **Position Sync**: Import stock and options positions from IBKR
 - **Status Monitoring**: Check connection status and sync history
 - **Shared Database**: Direct access to Wheeler's SQLite database
+- **Greeks & Vol Surface**: Wheeler UI now displays option Greeks (delta, gamma, theta, vega, rho) for synced positions and plots a simple volatility surface for owned strikes/expirations using Polygon snapshots when available.
 
 ## Requirements
 
