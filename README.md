@@ -141,6 +141,29 @@ Edit `docker-compose.yml` to customize:
 - **Volume**: Change `./data:/app/data` to your preferred data path
 - **Environment**: Uncomment and set `POLYGON_API_KEY` for market data
 
+### Automated GHCR Images
+
+- GitHub Actions workflow `.github/workflows/docker-publish.yml` builds and pushes both Compose services to GHCR on every push to `main` and on published releases.
+- Images are published as `ghcr.io/algo-dude/wheeler` and `ghcr.io/algo-dude/wheeler-ibkr-service` with `latest`, branch, tag, and commit SHA tags. Example deployment using the published images:
+
+```yaml
+services:
+  wheeler:
+    image: ghcr.io/algo-dude/wheeler:latest
+    ports:
+      - "8077:8080"
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - ibkr-service
+  ibkr-service:
+    image: ghcr.io/algo-dude/wheeler-ibkr-service:latest
+    volumes:
+      - ./data:/app/data
+```
+
+- To customize or disable automation, edit the branch/tag filters in the workflow file or disable the workflow in the GitHub Actions settings.
+
 ### Stopping Wheeler
 
 ```bash
