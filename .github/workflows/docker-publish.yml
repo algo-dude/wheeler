@@ -11,6 +11,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  IBKR_IMAGE_NAME: ${{ github.repository }}-ibkr-service
 
 jobs:
   build-and-push:
@@ -31,13 +32,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract Docker metadata
-        id: meta
+        id: meta-wheeler
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
+            type=ref,event=tag
             type=sha,prefix={{branch}}-
 
       - name: Build and push Docker image
@@ -45,5 +47,25 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-wheeler.outputs.tags }}
+          labels: ${{ steps.meta-wheeler.outputs.labels }}
+
+      - name: Extract IBKR service Docker metadata
+        id: meta-ibkr
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IBKR_IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push IBKR service image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ibkr_service
+          file: ./ibkr_service/Dockerfile
+          push: true
+          tags: ${{ steps.meta-ibkr.outputs.tags }}
+          labels: ${{ steps.meta-ibkr.outputs.labels }}
