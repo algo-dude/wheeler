@@ -163,6 +163,14 @@ services:
 ```
 
 - To customize or disable automation, edit the branch/tag filters in the workflow file or disable the workflow in the GitHub Actions settings.
+- Troubleshooting GHCR pulls:
+  - The image names are `ghcr.io/algo-dude/wheeler` and `ghcr.io/algo-dude/wheeler-ibkr-service` (there is no `wheeler-ibkr` image).
+  - Anonymous pulls require the packages to be **Public**. Open the package page in GitHub Packages settings and change visibility to Public (for user packages: `https://github.com/users/algo-dude/packages/container/<package>` → Package settings → Change visibility).
+  - After changing visibility, ensure the `latest` tag exists (retag and `docker push ghcr.io/algo-dude/wheeler-ibkr-service:latest` if needed) and test with:
+    ```bash
+    docker logout ghcr.io || true
+    docker pull ghcr.io/algo-dude/wheeler-ibkr-service:latest
+    ```
 
 ### Stopping Wheeler
 
