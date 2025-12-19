@@ -2,10 +2,12 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"stonks/internal/polygon"
 	"strconv"
 )
 
@@ -63,6 +65,34 @@ type IBKRConnectionConfig struct {
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	ClientID int    `json:"client_id"`
+}
+
+// OwnedOptionView represents an IBKR-owned option with Greeks
+type OwnedOptionView struct {
+	ID           int                    `json:"id"`
+	Symbol       string                 `json:"symbol"`
+	Type         string                 `json:"type"`
+	Strike       float64                `json:"strike"`
+	Expiration   string                 `json:"expiration"`
+	Contracts    int                    `json:"contracts"`
+	Premium      float64                `json:"premium"`
+	Greeks       *polygon.OptionGreeks  `json:"greeks,omitempty"`
+	ImpliedVol   *float64               `json:"implied_volatility,omitempty"`
+	SurfacePoint *VolSurfacePoint       `json:"surface_point,omitempty"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// VolSurfacePoint represents a point in the volatility surface visualization
+type VolSurfacePoint struct {
+	Symbol      string   `json:"symbol"`
+	Strike      float64  `json:"strike"`
+	Expiration  string   `json:"expiration"`
+	ExpiryMs    int64    `json:"expiry_ms"`
+	IV          *float64 `json:"iv,omitempty"`
+	IsOwned     bool     `json:"is_owned"`
+	OptionType  string   `json:"option_type"`
+	Contracts   int      `json:"contracts"`
+	Description string   `json:"description"`
 }
 
 // ibkrTestHandler proxies test connection request to IBKR microservice
@@ -196,6 +226,69 @@ func (s *Server) ibkrStatusHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(responseBody)
+}
+
+// ibkrOwnedOptionsHandler returns owned options with Greeks and surface points
+func (s *Server) ibkrOwnedOptionsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	openOptions, err := s.optionService.GetOpen()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to fetch options: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	payload := struct {
+		Options []OwnedOptionView `json:"options"`
+		Surface []VolSurfacePoint `json:"surface"`
+		Warning string            `json:"warning,omitempty"`
+	}{
+		Options: []OwnedOptionView{},
+		Surface: []VolSurfacePoint{},
+	}
+
+	for _, opt := range openOptions {
+		view := OwnedOptionView{
+			ID:         opt.ID,
+			Symbol:     opt.Symbol,
+			Type:       opt.Type,
+			Strike:     opt.Strike,
+			Contracts:  opt.Contracts,
+			Premium:    opt.Premium,
+			Expiration: opt.Expiration.Format("2006-01-02"),
+		}
+
+		if s.polygonService != nil {
+			g, gErr := s.polygonService.GetOptionGreeks(r.Context(), opt)
+			if gErr != nil && payload.Warning == "" {
+				payload.Warning = fmt.Sprintf("Greeks unavailable: %v", gErr)
+			}
+			if g != nil {
+				view.Greeks = g
+				view.ImpliedVol = g.ImpliedVolatility
+				view.SurfacePoint = &VolSurfacePoint{
+					Symbol:      opt.Symbol,
+					Strike:      opt.Strike,
+					Expiration:  view.Expiration,
+					ExpiryMs:    opt.Expiration.UnixMilli(),
+					IV:          g.ImpliedVolatility,
+					IsOwned:     true,
+					OptionType:  opt.Type,
+					Contracts:   opt.Contracts,
+					Description: fmt.Sprintf("%s %s %.2f", opt.Symbol, opt.Type, opt.Strike),
+				}
+				payload.Surface = append(payload.Surface, *view.SurfacePoint)
+			}
+		}
+
+		payload.Options = append(payload.Options, view)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(payload)
 }
 
 // ibkrDisconnectHandler proxies disconnect request to IBKR microservice

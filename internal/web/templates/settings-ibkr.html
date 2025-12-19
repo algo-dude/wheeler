@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IBKR Integration - Wheeler</title>
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
@@ -109,6 +110,45 @@
                         <div class="settings-card-body">
                             <div class="sync-results" id="syncResults">
                                 <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Owned Options with Greeks -->
+                <div class="settings-form-container">
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <i class="fas fa-superscript"></i>
+                            <h3>Owned Options (Greeks &amp; Vol Surface)</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="status-description" id="ownedOptionsStatus">Loading owned options...</div>
+                            <div class="table-container-scrollable">
+                                <table class="financial-table" id="ownedOptionsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Symbol</th>
+                                            <th>Type</th>
+                                            <th>Strike</th>
+                                            <th>Expiration</th>
+                                            <th>Qty</th>
+                                            <th>Premium</th>
+                                            <th>Delta</th>
+                                            <th>Gamma</th>
+                                            <th>Theta</th>
+                                            <th>Vega</th>
+                                            <th>Rho</th>
+                                            <th>IV</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td colspan="12" style="text-align:center;">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="chart-container" style="height:320px; margin-top: 16px;">
+                                <canvas id="volSurfaceChart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -352,10 +392,150 @@
     </style>
 
     <script>
+        let volSurfaceChart = null;
+
         // Check status on load
         document.addEventListener('DOMContentLoaded', function() {
             checkStatus();
+            loadOwnedOptions();
         });
+
+        function formatGreek(value, decimals = 4) {
+            if (value === null || value === undefined || isNaN(value)) {
+                return 'N/A';
+            }
+            return Number(value).toFixed(decimals);
+        }
+
+        function renderOwnedOptionsTable(options) {
+            const tbody = document.querySelector('#ownedOptionsTable tbody');
+            const statusEl = document.getElementById('ownedOptionsStatus');
+
+            if (!options || options.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;">No owned options found</td></tr>';
+                statusEl.textContent = 'No owned option positions are currently open.';
+                return;
+            }
+
+            const rows = options.map(opt => {
+                const greek = opt.greeks || {};
+                const hasIV = typeof opt.implied_volatility === 'number';
+                const ivDisplay = hasIV ? (opt.implied_volatility * 100).toFixed(2) + '%' : 'N/A';
+                return `
+                    <tr>
+                        <td>${opt.symbol}</td>
+                        <td>${opt.type}</td>
+                        <td>$${Number(opt.strike).toFixed(2)}</td>
+                        <td>${opt.expiration}</td>
+                        <td>${opt.contracts}</td>
+                        <td>$${Number(opt.premium).toFixed(2)}</td>
+                        <td>${formatGreek(greek.delta)}</td>
+                        <td>${formatGreek(greek.gamma)}</td>
+                        <td>${formatGreek(greek.theta)}</td>
+                        <td>${formatGreek(greek.vega)}</td>
+                        <td>${formatGreek(greek.rho)}</td>
+                        <td>${ivDisplay}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            tbody.innerHTML = rows;
+            statusEl.textContent = 'Greeks shown when available; unavailable values display as N/A.';
+        }
+
+        function renderVolSurfaceChart(points) {
+            const canvas = document.getElementById('volSurfaceChart');
+
+            if (volSurfaceChart) {
+                volSurfaceChart.destroy();
+            }
+
+            if (!points || points.length === 0) {
+                if (canvas) {
+                    canvas.style.display = 'none';
+                }
+                return;
+            }
+
+            canvas.style.display = 'block';
+            const data = points.map(p => {
+                const ivValue = p.iv ? p.iv * 100 : 0;
+                const radius = Math.max(4, Math.min(16, ivValue / 2));
+                const xValue = p.expiry_ms ? p.expiry_ms : Date.parse(p.expiration);
+                return {
+                    x: xValue,
+                    y: p.strike,
+                    r: radius,
+                    iv: ivValue,
+                    label: `${p.symbol} ${p.option_type} $${p.strike}`
+                };
+            });
+
+            const ctx = canvas.getContext('2d');
+            volSurfaceChart = new Chart(ctx, {
+                type: 'bubble',
+                data: {
+                    datasets: [{
+                        label: 'Owned Positions',
+                        data: data,
+                        backgroundColor: '#3498db'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const point = context.raw;
+                                    const ivLabel = point.iv ? point.iv.toFixed(2) + '%' : 'N/A';
+                                    return [
+                                        point.label,
+                                        `IV: ${ivLabel}`,
+                                        `Strike: $${Number(point.y).toFixed(2)}`,
+                                        `Expiration: ${new Date(point.x).toLocaleDateString()}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: { display: true, text: 'Expiration' },
+                            ticks: { 
+                                color: '#ccc',
+                                callback: function(value) {
+                                    return new Date(value).toLocaleDateString();
+                                }
+                            }
+                        },
+                        y: {
+                            title: { display: true, text: 'Strike' },
+                            ticks: { color: '#ccc' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function loadOwnedOptions() {
+            fetch('/api/ibkr/owned-options')
+                .then(resp => resp.json())
+                .then(data => {
+                    renderOwnedOptionsTable(data.options || []);
+                    renderVolSurfaceChart(data.surface || []);
+                    if (data.warning) {
+                        showNotification(data.warning, 'error');
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to load owned options:', err);
+                    document.getElementById('ownedOptionsStatus').textContent = 'Failed to load owned options.';
+                });
+        }
 
         function checkStatus() {
             const statusIndicator = document.querySelector('.status-indicator');
