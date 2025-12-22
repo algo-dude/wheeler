@@ -172,6 +172,10 @@ docker compose down
 
 ## Application Overview
 
+### IBKR Integration Status
+- IBKR Greeks/IV sourcing and per-row data source tagging were added in `eda4138`.
+- **Cost basis, assignment detection, and fee ingestion from IBKR transactions are not yet implemented.** Track this follow-up work in `docs/ibkr-cost-basis-assignments-fees.md`.
+
 ## Database Management
 
 Wheeler supports multiple SQLite databases:
