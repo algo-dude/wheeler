@@ -3,6 +3,7 @@ data/backups
 data/test_db.db
 data/wheeler.*
 data/integration_test.db*
+data/migration_test.db*
 data/currentdb
 
 # Build artifacts
