@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"stonks/internal/polygon"
 	"strconv"
+	"strings"
 )
 
 // IBKRSettingsData holds data for the IBKR settings template
@@ -80,6 +82,7 @@ type OwnedOptionView struct {
 	ImpliedVol   *float64               `json:"implied_volatility,omitempty"`
 	SurfacePoint *VolSurfacePoint       `json:"surface_point,omitempty"`
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	DataSource   string                 `json:"data_source,omitempty"`
 }
 
 // VolSurfacePoint represents a point in the volatility surface visualization
@@ -250,6 +253,11 @@ func (s *Server) ibkrOwnedOptionsHandler(w http.ResponseWriter, r *http.Request)
 		Surface: []VolSurfacePoint{},
 	}
 
+	ibkrGreeks, ibkrWarning := s.fetchIBKRGreeks(r.Context())
+	if ibkrWarning != "" {
+		payload.Warning = ibkrWarning
+	}
+
 	for _, opt := range openOptions {
 		view := OwnedOptionView{
 			ID:         opt.ID,
@@ -261,14 +269,12 @@ func (s *Server) ibkrOwnedOptionsHandler(w http.ResponseWriter, r *http.Request)
 			Expiration: opt.Expiration.Format("2006-01-02"),
 		}
 
-		if s.polygonService != nil {
-			g, gErr := s.polygonService.GetOptionGreeks(r.Context(), opt)
-			if gErr != nil && payload.Warning == "" {
-				payload.Warning = fmt.Sprintf("Greeks unavailable: %v", gErr)
-			}
-			if g != nil {
-				view.Greeks = g
-				view.ImpliedVol = g.ImpliedVolatility
+		lookupKey := optionKey(view.Symbol, view.Type, view.Strike, view.Expiration)
+		if g, ok := ibkrGreeks[lookupKey]; ok {
+			view.Greeks = g.Greeks
+			view.ImpliedVol = g.ImpliedVolatility
+			view.DataSource = "IBKR"
+			if view.ImpliedVol != nil {
 				view.SurfacePoint = &VolSurfacePoint{
 					Symbol:      opt.Symbol,
 					Strike:      opt.Strike,
@@ -284,11 +290,117 @@ func (s *Server) ibkrOwnedOptionsHandler(w http.ResponseWriter, r *http.Request)
 			}
 		}
 
+		if s.polygonService != nil {
+			g, gErr := s.polygonService.GetOptionGreeks(r.Context(), opt)
+			if gErr != nil {
+				if payload.Warning == "" {
+					payload.Warning = fmt.Sprintf("Greeks unavailable: %v", gErr)
+				} else {
+					payload.Warning = fmt.Sprintf("%s; Greeks unavailable: %v", payload.Warning, gErr)
+				}
+			}
+			if g != nil {
+				// Prefer IBKR if available; otherwise use Polygon as fallback
+				if view.Greeks == nil {
+					view.Greeks = g
+					view.ImpliedVol = g.ImpliedVolatility
+					view.DataSource = "Polygon"
+				}
+				if view.SurfacePoint == nil && g.ImpliedVolatility != nil {
+					view.SurfacePoint = &VolSurfacePoint{
+						Symbol:      opt.Symbol,
+						Strike:      opt.Strike,
+						Expiration:  view.Expiration,
+						ExpiryMs:    opt.Expiration.UnixMilli(),
+						IV:          g.ImpliedVolatility,
+						IsOwned:     true,
+						OptionType:  opt.Type,
+						Contracts:   opt.Contracts,
+						Description: fmt.Sprintf("%s %s %.2f", opt.Symbol, opt.Type, opt.Strike),
+					}
+					payload.Surface = append(payload.Surface, *view.SurfacePoint)
+				}
+			}
+		}
+
+		if view.DataSource == "" && view.Greeks != nil {
+			view.DataSource = "Polygon"
+		}
+		if view.DataSource == "" {
+			view.DataSource = "Unavailable"
+		}
+
 		payload.Options = append(payload.Options, view)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(payload)
+}
+
+type ibkrGreekOption struct {
+	Symbol            string                `json:"symbol"`
+	Right             string                `json:"right,omitempty"`
+	Type              string                `json:"type,omitempty"`
+	Strike            float64               `json:"strike"`
+	Expiration        string                `json:"expiration"`
+	Greeks            *polygon.OptionGreeks `json:"greeks,omitempty"`
+	ImpliedVolatility *float64              `json:"implied_volatility,omitempty"`
+	DataSource        string                `json:"data_source,omitempty"`
+}
+
+type ibkrGreekResponse struct {
+	Options []ibkrGreekOption `json:"options"`
+	Errors  []string          `json:"errors"`
+}
+
+func optionKey(symbol, optionType string, strike float64, expiration string) string {
+	return fmt.Sprintf("%s|%s|%.4f|%s", strings.ToUpper(symbol), strings.ToUpper(optionType), strike, expiration)
+}
+
+func (s *Server) fetchIBKRGreeks(ctx context.Context) (map[string]ibkrGreekOption, string) {
+	result := make(map[string]ibkrGreekOption)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getIBKRServiceURL()+"/api/ibkr/greeks", nil)
+	if err != nil {
+		return result, fmt.Sprintf("Failed to build IBKR Greeks request: %v", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return result, fmt.Sprintf("IBKR Greeks unavailable: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return result, fmt.Sprintf("IBKR Greeks service responded with %d", resp.StatusCode)
+	}
+
+	var payload ibkrGreekResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return result, fmt.Sprintf("Failed to parse IBKR Greeks response: %v", err)
+	}
+
+	for _, opt := range payload.Options {
+		optionType := opt.Type
+		if optionType == "" && opt.Right != "" {
+			if strings.ToUpper(opt.Right) == "C" {
+				optionType = "Call"
+			} else if strings.ToUpper(opt.Right) == "P" {
+				optionType = "Put"
+			}
+		}
+		if optionType == "" {
+			continue
+		}
+		key := optionKey(opt.Symbol, optionType, opt.Strike, opt.Expiration)
+		result[key] = opt
+	}
+
+	if len(payload.Errors) > 0 {
+		return result, strings.Join(payload.Errors, "; ")
+	}
+
+	return result, ""
 }
 
 // ibkrDisconnectHandler proxies disconnect request to IBKR microservice

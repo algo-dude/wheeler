@@ -140,10 +140,11 @@
                                             <th>Vega</th>
                                             <th>Rho</th>
                                             <th>IV</th>
+                                            <th>Source</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr><td colspan="12" style="text-align:center;">Loading...</td></tr>
+                                        <tr><td colspan="13" style="text-align:center;">Loading...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -421,6 +422,7 @@
                 const greek = opt.greeks || {};
                 const hasIV = typeof opt.implied_volatility === 'number';
                 const ivDisplay = hasIV ? (opt.implied_volatility * 100).toFixed(2) + '%' : 'N/A';
+                const source = opt.data_source || 'Polygon';
                 return `
                     <tr>
                         <td>${opt.symbol}</td>
@@ -435,6 +437,7 @@
                         <td>${formatGreek(greek.vega)}</td>
                         <td>${formatGreek(greek.rho)}</td>
                         <td>${ivDisplay}</td>
+                        <td>${source}</td>
                     </tr>
                 `;
             }).join('');

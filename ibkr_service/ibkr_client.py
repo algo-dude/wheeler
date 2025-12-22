@@ -1,7 +1,7 @@
 """IBKR client module using ib_async for Interactive Brokers connection."""
 import asyncio
 from datetime import date
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import logging
 
 from ib_async import IB, Contract, Option, Stock
@@ -132,6 +132,97 @@ class IBKRClient:
         
         logger.info(f"Retrieved {len(result)} positions from IBKR")
         return result
+
+    async def get_option_greeks(self, options: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Get real-time option Greeks for the provided option positions.
+
+        Args:
+            options: List of option position dictionaries (symbol, strike, expiration, right)
+
+        Returns:
+            List of dictionaries containing option metadata and Greek values.
+        """
+        if not self.is_connected:
+            raise ConnectionError("Not connected to IBKR")
+
+        if not options:
+            return []
+
+        contracts = []
+        normalized = []
+
+        for opt in options:
+            try:
+                expiration = opt.get("expiration")
+                # Normalize expiration to IBKR expected format YYYYMMDD
+                if expiration and "-" in expiration:
+                    expiration = expiration.replace("-", "")
+
+                right = opt.get("right") or opt.get("type")
+                if right:
+                    right = right[0].upper()  # C or P
+
+                contract = Option(
+                    symbol=opt["symbol"],
+                    lastTradeDateOrContractMonth=expiration,
+                    strike=float(opt["strike"]),
+                    right=right,
+                    exchange="SMART",
+                    currency="USD",
+                )
+                contracts.append(contract)
+                normalized.append(
+                    {
+                        "symbol": opt.get("symbol"),
+                        "strike": float(opt.get("strike")),
+                        "expiration": expiration,
+                        "right": right,
+                        "position": opt.get("position"),
+                        "multiplier": opt.get("multiplier"),
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Failed to prepare option contract for Greeks: {e}")
+                continue
+
+        if not contracts:
+            return []
+
+        try:
+            tickers = await self.ib.reqTickersAsync(*contracts)
+        except Exception as e:
+            logger.error(f"Failed to request Greeks from IBKR: {e}")
+            raise
+
+        results: List[Dict[str, Any]] = []
+        for idx, ticker in enumerate(tickers):
+            base = normalized[idx]
+            greeks_obj = getattr(ticker, "modelGreeks", None)
+
+            greek_values = None
+            implied_vol = None
+
+            if greeks_obj:
+                greek_values = {
+                    "delta": getattr(greeks_obj, "delta", None),
+                    "gamma": getattr(greeks_obj, "gamma", None),
+                    "theta": getattr(greeks_obj, "theta", None),
+                    "vega": getattr(greeks_obj, "vega", None),
+                    "rho": getattr(greeks_obj, "rho", None),
+                }
+                implied_vol = getattr(greeks_obj, "impliedVol", None)
+
+            results.append(
+                {
+                    **base,
+                    "greeks": greek_values,
+                    "implied_volatility": implied_vol,
+                    "data_source": "IBKR",
+                }
+            )
+
+        return results
     
     async def get_account_summary(self) -> dict:
         """Get account summary information."""
