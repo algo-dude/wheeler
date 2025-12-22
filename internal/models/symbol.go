@@ -41,10 +41,11 @@ type LongPosition struct {
 }
 
 func (lp *LongPosition) CalculateYield(quarterlyDividend float64) float64 {
-	if lp.BuyPrice == 0 {
+	costBasis := lp.costBasisPerShare()
+	if costBasis == 0 {
 		return 0
 	}
-	return (quarterlyDividend * 4) / lp.BuyPrice * 100
+	return (quarterlyDividend * 4) / costBasis * 100
 }
 
 func (lp *LongPosition) CalculateProfitLoss(currentPrice float64) float64 {
