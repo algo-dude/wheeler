@@ -27,22 +27,25 @@ func (s *Symbol) CalculateYield() float64 {
 }
 
 type LongPosition struct {
-	ID        int        `json:"id"`
-	Symbol    string     `json:"symbol"`
-	Opened    time.Time  `json:"opened"`
-	Closed    *time.Time `json:"closed"`
-	Shares    int        `json:"shares"`
-	BuyPrice  float64    `json:"buy_price"`
-	ExitPrice *float64   `json:"exit_price"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID                        int        `json:"id"`
+	Symbol                    string     `json:"symbol"`
+	Opened                    time.Time  `json:"opened"`
+	Closed                    *time.Time `json:"closed"`
+	Shares                    int        `json:"shares"`
+	BuyPrice                  float64    `json:"buy_price"`
+	AdjustedCostBasisPerShare float64    `json:"adjusted_cost_basis_per_share"`
+	AdjustedCostBasisTotal    float64    `json:"adjusted_cost_basis_total"`
+	ExitPrice                 *float64   `json:"exit_price"`
+	CreatedAt                 time.Time  `json:"created_at"`
+	UpdatedAt                 time.Time  `json:"updated_at"`
 }
 
 func (lp *LongPosition) CalculateYield(quarterlyDividend float64) float64 {
-	if lp.BuyPrice == 0 {
+	costBasis := lp.costBasisPerShare()
+	if costBasis == 0 {
 		return 0
 	}
-	return (quarterlyDividend * 4) / lp.BuyPrice * 100
+	return (quarterlyDividend * 4) / costBasis * 100
 }
 
 func (lp *LongPosition) CalculateProfitLoss(currentPrice float64) float64 {
@@ -50,27 +53,35 @@ func (lp *LongPosition) CalculateProfitLoss(currentPrice float64) float64 {
 	if lp.ExitPrice != nil {
 		exitPrice = *lp.ExitPrice
 	}
-	return (exitPrice - lp.BuyPrice) * float64(lp.Shares)
+	return (exitPrice - lp.costBasisPerShare()) * float64(lp.Shares)
 }
 
 func (lp *LongPosition) CalculateROI(currentPrice float64) float64 {
-	if lp.BuyPrice == 0 {
+	costBasis := lp.costBasisPerShare()
+	if costBasis == 0 {
 		return 0
 	}
 	exitPrice := currentPrice
 	if lp.ExitPrice != nil {
 		exitPrice = *lp.ExitPrice
 	}
-	return ((exitPrice - lp.BuyPrice) / lp.BuyPrice) * 100
+	return ((exitPrice - costBasis) / costBasis) * 100
 }
 
 func (lp *LongPosition) CalculateAmount() float64 {
-	return lp.BuyPrice * float64(lp.Shares)
+	return lp.costBasisPerShare() * float64(lp.Shares)
 }
 
 func (lp *LongPosition) CalculateTotalInvested() float64 {
 	// For now, same as amount (but could include fees, etc. in future)
-	return lp.BuyPrice * float64(lp.Shares)
+	return lp.CalculateAmount()
+}
+
+func (lp *LongPosition) costBasisPerShare() float64 {
+	if lp.AdjustedCostBasisPerShare > 0 {
+		return lp.AdjustedCostBasisPerShare
+	}
+	return lp.BuyPrice
 }
 
 func (lp *LongPosition) GetExitPriceValue() float64 {

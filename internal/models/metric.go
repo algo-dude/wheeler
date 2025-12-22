@@ -322,9 +322,12 @@ func (ms *MetricService) calculateTreasuryValueForDate(date time.Time) (float64,
 func (ms *MetricService) calculateLongValueForDate(date time.Time) (float64, error) {
 	// Query for long positions that were active on the given date
 	// Active means: opened <= date AND (closed IS NULL OR closed > date)
-	// Value = shares * buy_price
+	// Value = shares * cost basis (prefer adjusted if present)
 	query := `
-		SELECT COALESCE(SUM(shares * buy_price), 0) as total_value
+		SELECT COALESCE(SUM(shares * CASE 
+			WHEN adjusted_cost_basis_per_share > 0 THEN adjusted_cost_basis_per_share 
+			ELSE buy_price 
+		END), 0) as total_value
 		FROM long_positions 
 		WHERE date(opened) <= date(?) 
 		AND (closed IS NULL OR date(closed) > date(?))

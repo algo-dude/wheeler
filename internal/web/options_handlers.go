@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-
 // optionsHandler serves the options analysis view
 func (s *Server) optionsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[OPTIONS PAGE] %s %s - Start processing options page request", r.Method, r.URL.Path)
@@ -106,12 +105,12 @@ func (s *Server) allOptionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := AllOptionsDataWithJSON{
-		Symbols:         symbols,
-		AllSymbols:      symbols, // For navigation compatibility
-		OptionsIndex:    optionsIndex,
+		Symbols:          symbols,
+		AllSymbols:       symbols, // For navigation compatibility
+		OptionsIndex:     optionsIndex,
 		OptionsIndexJSON: template.JS(string(indexJSON)),
-		CurrentDB:       s.getCurrentDatabaseName(),
-		ActivePage:      "options",
+		CurrentDB:        s.getCurrentDatabaseName(),
+		ActivePage:       "options",
 	}
 
 	log.Printf("[ALL OPTIONS PAGE] Rendering all-options.html template with index containing %d options", totalOptions)
@@ -288,6 +287,7 @@ func (s *Server) createOption(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	s.recalculateAdjustedCostBasis(req.Symbol)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(option)
@@ -348,6 +348,7 @@ func (s *Server) updateOption(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to update option: %v", err), http.StatusInternalServerError)
 		return
 	}
+	s.recalculateAdjustedCostBasis(req.Symbol)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(option)
@@ -413,7 +414,7 @@ func (s *Server) deleteOption(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("[DELETE OPTION] Successfully deleted option using compound key")
 	}
-
+	s.recalculateAdjustedCostBasis(req.Symbol)
 	log.Printf("[DELETE OPTION] Sending success response")
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "success"}); err != nil {

@@ -463,6 +463,8 @@ func (s *Server) deleteLongPositionHandler(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	s.recalculateAdjustedCostBasis(req.Symbol)
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"success": true}`))
 }
