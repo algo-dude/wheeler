@@ -87,7 +87,10 @@ func (db *DB) runMigrations() error {
 		if err != nil {
 			return fmt.Errorf("failed to add adjusted_cost_basis_per_share column: %w", err)
 		}
-		// Initialize existing records: set adjusted_cost_basis_per_share = buy_price
+		// Initialize existing records that were created before this column existed.
+		// Since this UPDATE only runs immediately after adding the column (inside the if block),
+		// it will only affect pre-existing records that have the default 0.0 value.
+		// Future records are created through the Create method which sets proper values.
 		_, err = db.Exec("UPDATE long_positions SET adjusted_cost_basis_per_share = buy_price WHERE adjusted_cost_basis_per_share = 0.0")
 		if err != nil {
 			return fmt.Errorf("failed to initialize adjusted_cost_basis_per_share values: %w", err)
@@ -106,7 +109,10 @@ func (db *DB) runMigrations() error {
 		if err != nil {
 			return fmt.Errorf("failed to add adjusted_cost_basis_total column: %w", err)
 		}
-		// Initialize existing records: set adjusted_cost_basis_total = buy_price * shares
+		// Initialize existing records that were created before this column existed.
+		// Since this UPDATE only runs immediately after adding the column (inside the if block),
+		// it will only affect pre-existing records that have the default 0.0 value.
+		// Future records are created through the Create method which sets proper values.
 		_, err = db.Exec("UPDATE long_positions SET adjusted_cost_basis_total = buy_price * shares WHERE adjusted_cost_basis_total = 0.0")
 		if err != nil {
 			return fmt.Errorf("failed to initialize adjusted_cost_basis_total values: %w", err)
