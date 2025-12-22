@@ -317,7 +317,8 @@ func getCompanyName(symbol string) string {
 }
 
 // costBasisAdjustingOptions returns options that adjust cost basis for a specific lot.
-// - Cash-secured puts that were closed on the same day the lot opened (assignments)
+// Heuristic rules mirror the cost basis recalculation:
+// - Cash-secured puts that were closed on the same day the lot opened (assumed assignment)
 // - Covered calls opened while the lot was active
 func costBasisAdjustingOptions(position *models.LongPosition, options []*models.Option) []*models.Option {
 	var result []*models.Option
@@ -352,7 +353,7 @@ func positionActiveOn(opened time.Time, closed *time.Time, t time.Time) bool {
 	if closed == nil {
 		return true
 	}
-	// Include events on the closing date
+	// Include events occurring on the closing date (same treatment as cost basis engine)
 	if sameDay(closed, &t) {
 		return true
 	}
