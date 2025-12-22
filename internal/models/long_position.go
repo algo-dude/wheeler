@@ -29,11 +29,19 @@ func (s *LongPositionService) Create(symbol string, opened time.Time, shares int
 		return nil, fmt.Errorf("failed to create long position: %w", err)
 	}
 
-	if err := s.RecalculateAdjustedCostBasisForSymbol(symbol); err != nil {
-		return nil, fmt.Errorf("failed to recalculate cost basis after create: %w", err)
+	needRecalc, err := s.shouldRecalculate(symbol)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check recalc requirement: %w", err)
 	}
 
-	return s.GetByID(position.ID)
+	if needRecalc {
+		if err := s.RecalculateAdjustedCostBasisForSymbol(symbol); err != nil {
+			return nil, fmt.Errorf("failed to recalculate cost basis after create: %w", err)
+		}
+		return s.GetByID(position.ID)
+	}
+
+	return &position, nil
 }
 
 func (s *LongPositionService) GetBySymbol(symbol string) ([]*LongPosition, error) {
@@ -170,11 +178,19 @@ func (s *LongPositionService) UpdateByID(id int, symbol string, opened time.Time
 		return nil, fmt.Errorf("failed to update long position: %w", err)
 	}
 
-	if err := s.RecalculateAdjustedCostBasisForSymbol(symbol); err != nil {
-		return nil, fmt.Errorf("failed to recalculate cost basis after update: %w", err)
+	needRecalc, err := s.shouldRecalculate(symbol)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check recalc requirement: %w", err)
 	}
 
-	return s.GetByID(position.ID)
+	if needRecalc {
+		if err := s.RecalculateAdjustedCostBasisForSymbol(symbol); err != nil {
+			return nil, fmt.Errorf("failed to recalculate cost basis after update: %w", err)
+		}
+		return s.GetByID(position.ID)
+	}
+
+	return &position, nil
 }
 
 // DeleteByID deletes a long position by its ID
@@ -383,7 +399,7 @@ func (s *LongPositionService) RecalculateAdjustedCostBasisForSymbol(symbol strin
 		adjustedTotal := baseTotal - p.adjust
 		if adjustedTotal < 0 {
 			log.Printf("[COST BASIS] Adjusted cost basis below zero for symbol %s (position %d). Base=%.2f, adjustments=%.2f", symbol, p.id, baseTotal, p.adjust)
-			adjustedTotal = 0
+			return fmt.Errorf("adjusted cost basis below zero for symbol %s (position %d)", symbol, p.id)
 		}
 		var adjustedPerShare float64
 		if p.shares > 0 {
@@ -413,7 +429,8 @@ func positionActiveOn(opened time.Time, closed *time.Time, t time.Time) bool {
 	if closed == nil {
 		return true
 	}
-	// Treat same day as active to include assignments or rolls recorded on the closing date
+	// Treat same day as active to include assignments or rolls recorded on the closing date, since those fills
+	// settle the final basis for the lot even if it is marked closed that day.
 	if sameDay(closed, &t) {
 		return true
 	}
@@ -430,4 +447,12 @@ func minInt(a, b int) int {
 func netOptionPremium(opt *Option) float64 {
 	exit := opt.GetExitPriceValue()
 	return (opt.Premium-exit)*float64(opt.Contracts)*100 - opt.Commission
+}
+
+func (s *LongPositionService) shouldRecalculate(symbol string) (bool, error) {
+	var optionCount int
+	if err := s.db.QueryRow(`SELECT COUNT(1) FROM options WHERE symbol = ?`, symbol).Scan(&optionCount); err != nil {
+		return true, err
+	}
+	return optionCount > 0, nil
 }

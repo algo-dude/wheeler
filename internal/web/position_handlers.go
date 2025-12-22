@@ -384,8 +384,6 @@ func (s *Server) createLongPositionHandler(w http.ResponseWriter, r *http.Reques
 		position, _ = s.longPositionService.GetByID(position.ID)
 	}
 
-	s.recalculateAdjustedCostBasis(req.Symbol)
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(position)
 }
@@ -428,8 +426,6 @@ func (s *Server) updateLongPositionHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Failed to update long position", http.StatusInternalServerError)
 		return
 	}
-
-	s.recalculateAdjustedCostBasis(req.Symbol)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(position)
