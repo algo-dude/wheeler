@@ -66,6 +66,12 @@ GET /api/ibkr/status
 ```
 Returns current connection status and last sync results.
 
+### Get Greeks for Owned Options
+```
+GET /api/ibkr/greeks
+```
+Returns option Greeks and implied volatility for positions currently held in IBKR. If the service cannot connect to TWS/Gateway, an empty list is returned with an error message so Wheeler can fall back to Polygon data.
+
 ### Disconnect
 ```
 POST /api/ibkr/disconnect

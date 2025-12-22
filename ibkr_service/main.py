@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config import settings
 from ibkr_client import ibkr_client
@@ -67,6 +67,34 @@ class StatusResponse(BaseModel):
     last_sync: Optional[str] = None
     last_sync_result: Optional[dict] = None
     database: dict = {}
+
+
+class GreekValues(BaseModel):
+    """Greek value container."""
+    delta: Optional[float] = None
+    gamma: Optional[float] = None
+    theta: Optional[float] = None
+    vega: Optional[float] = None
+    rho: Optional[float] = None
+
+
+class OptionGreek(BaseModel):
+    """Greek data for an individual option contract."""
+    symbol: str
+    right: Optional[str] = None
+    strike: float
+    expiration: Optional[str] = None
+    position: Optional[float] = None
+    multiplier: Optional[int] = None
+    greeks: Optional[GreekValues] = None
+    implied_volatility: Optional[float] = None
+    data_source: str = "IBKR"
+
+
+class GreeksResponse(BaseModel):
+    """Response for Greek endpoint."""
+    options: list[OptionGreek] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
 
 
 @app.get("/")
@@ -165,6 +193,44 @@ async def disconnect():
     except Exception as e:
         logger.error(f"Disconnect error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ibkr/greeks", response_model=GreeksResponse)
+async def get_greeks(config: Optional[ConnectionConfig] = None):
+    """
+    Return Greek data for currently held option positions.
+
+    This uses IBKR market data when connected; errors are returned but
+    will not raise to keep Wheeler UI responsive.
+    """
+    response = GreeksResponse(options=[], errors=[])
+
+    try:
+        host = config.host if config else None
+        port = config.port if config else None
+        client_id = config.client_id if config else None
+
+        if not ibkr_client.is_connected:
+            connected = await ibkr_client.connect(host, port, client_id)
+            if not connected:
+                response.errors.append("Failed to connect to IBKR for Greeks")
+                return response
+
+        positions = await ibkr_client.get_positions()
+        option_positions = [p for p in positions if p.get("sec_type") == "OPT"]
+
+        greeks = await ibkr_client.get_option_greeks(option_positions)
+        for g in greeks:
+            try:
+                response.options.append(OptionGreek(**g))
+            except Exception as e:
+                logger.error(f"Failed to parse Greek payload for option {g.get('symbol')}: {e}")
+                response.errors.append(str(e))
+    except Exception as e:
+        logger.error(f"Greek retrieval error: {e}")
+        response.errors.append(str(e))
+
+    return response
 
 
 if __name__ == "__main__":
