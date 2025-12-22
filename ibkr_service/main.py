@@ -224,7 +224,7 @@ async def get_greeks(config: Optional[ConnectionConfig] = None):
             try:
                 response.options.append(OptionGreek(**g))
             except Exception as e:
-                logger.error(f"Failed to parse Greek payload: {e}")
+                logger.error(f"Failed to parse Greek payload for option {g.get('symbol')}: {e}")
                 response.errors.append(str(e))
     except Exception as e:
         logger.error(f"Greek retrieval error: {e}")

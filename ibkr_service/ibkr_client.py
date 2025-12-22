@@ -1,6 +1,6 @@
 """IBKR client module using ib_async for Interactive Brokers connection."""
 import asyncio
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, List, Dict, Any
 import logging
 
@@ -133,6 +133,26 @@ class IBKRClient:
         logger.info(f"Retrieved {len(result)} positions from IBKR")
         return result
 
+
+def normalize_expiration(value: Optional[str]) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.strptime(value.replace("-", ""), "%Y%m%d").strftime("%Y%m%d")
+    except ValueError:
+        return None
+
+
+def normalize_option_right(value: Optional[str]) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    v = value.strip().upper()
+    if not v:
+        return None
+    if v[0] in ("C", "P"):
+        return v[0]
+    return None
+
     async def get_option_greeks(self, options: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Get real-time option Greeks for the provided option positions.
@@ -154,25 +174,12 @@ class IBKRClient:
 
         for opt in options:
             try:
-                expiration_raw = opt.get("expiration")
-                expiration = None
-                if isinstance(expiration_raw, str):
-                    exp_clean = expiration_raw.replace("-", "")
-                    if len(exp_clean) == 8 and exp_clean.isdigit():
-                        expiration = exp_clean
+                expiration = normalize_expiration(opt.get("expiration"))
                 if expiration is None:
-                    logger.warning(f"Skipping option with invalid expiration: {expiration_raw}")
+                    logger.warning(f"Skipping option with invalid expiration: {opt.get('expiration')}")
                     continue
 
-                right = opt.get("right") or opt.get("type")
-                if isinstance(right, str):
-                    right = right.strip()
-                    if right:
-                        right = right[0].upper()
-                        if right not in ("C", "P"):
-                            right = None
-                    else:
-                        right = None
+                right = normalize_option_right(opt.get("right") or opt.get("type"))
 
                 contract = Option(
                     symbol=opt["symbol"],
