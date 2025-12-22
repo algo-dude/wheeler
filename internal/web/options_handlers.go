@@ -287,7 +287,6 @@ func (s *Server) createOption(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
 	s.recalculateAdjustedCostBasis(req.Symbol)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -349,7 +348,6 @@ func (s *Server) updateOption(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to update option: %v", err), http.StatusInternalServerError)
 		return
 	}
-
 	s.recalculateAdjustedCostBasis(req.Symbol)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -416,9 +414,7 @@ func (s *Server) deleteOption(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("[DELETE OPTION] Successfully deleted option using compound key")
 	}
-
 	s.recalculateAdjustedCostBasis(req.Symbol)
-
 	log.Printf("[DELETE OPTION] Sending success response")
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "success"}); err != nil {

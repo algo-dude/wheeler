@@ -52,18 +52,11 @@ func (lp *LongPosition) CalculateProfitLoss(currentPrice float64) float64 {
 	if lp.ExitPrice != nil {
 		exitPrice = *lp.ExitPrice
 	}
-	costBasis := lp.BuyPrice
-	if lp.AdjustedCostBasisPerShare > 0 {
-		costBasis = lp.AdjustedCostBasisPerShare
-	}
-	return (exitPrice - costBasis) * float64(lp.Shares)
+	return (exitPrice - lp.costBasisPerShare()) * float64(lp.Shares)
 }
 
 func (lp *LongPosition) CalculateROI(currentPrice float64) float64 {
-	costBasis := lp.BuyPrice
-	if lp.AdjustedCostBasisPerShare > 0 {
-		costBasis = lp.AdjustedCostBasisPerShare
-	}
+	costBasis := lp.costBasisPerShare()
 	if costBasis == 0 {
 		return 0
 	}
@@ -75,16 +68,19 @@ func (lp *LongPosition) CalculateROI(currentPrice float64) float64 {
 }
 
 func (lp *LongPosition) CalculateAmount() float64 {
-	costBasis := lp.BuyPrice
-	if lp.AdjustedCostBasisPerShare > 0 {
-		costBasis = lp.AdjustedCostBasisPerShare
-	}
-	return costBasis * float64(lp.Shares)
+	return lp.costBasisPerShare() * float64(lp.Shares)
 }
 
 func (lp *LongPosition) CalculateTotalInvested() float64 {
 	// For now, same as amount (but could include fees, etc. in future)
 	return lp.CalculateAmount()
+}
+
+func (lp *LongPosition) costBasisPerShare() float64 {
+	if lp.AdjustedCostBasisPerShare > 0 {
+		return lp.AdjustedCostBasisPerShare
+	}
+	return lp.BuyPrice
 }
 
 func (lp *LongPosition) GetExitPriceValue() float64 {

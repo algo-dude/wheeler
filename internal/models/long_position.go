@@ -379,7 +379,10 @@ func (s *LongPositionService) RecalculateAdjustedCostBasisForSymbol(symbol strin
 		if adjustedTotal < 0 {
 			adjustedTotal = 0
 		}
-		adjustedPerShare := adjustedTotal / float64(p.shares)
+		var adjustedPerShare float64
+		if p.shares > 0 {
+			adjustedPerShare = adjustedTotal / float64(p.shares)
+		}
 		if _, err := tx.Exec(`UPDATE long_positions SET adjusted_cost_basis_per_share = ?, adjusted_cost_basis_total = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, adjustedPerShare, adjustedTotal, p.id); err != nil {
 			return fmt.Errorf("failed to update adjusted cost basis: %w", err)
 		}

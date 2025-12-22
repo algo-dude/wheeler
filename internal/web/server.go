@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"path/filepath"
 	"sort"
-	"stonks/internal/database"
-	"stonks/internal/models"
-	"stonks/internal/polygon"
 	"strconv"
 	"strings"
 	"time"
+
+	"stonks/internal/database"
+	"stonks/internal/models"
+	"stonks/internal/polygon"
 
 	_ "github.com/mattn/go-sqlite3"
 )
