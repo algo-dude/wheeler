@@ -47,11 +47,17 @@ func (s *Server) ibkrConnectionConfig() IBKRConnectionConfig {
 	portStr := s.settingService.GetValueWithDefault("IBKR_TWS_PORT", ibkrEnvOrDefault("IBKR_TWS_PORT", "7497"))
 	clientStr := s.settingService.GetValueWithDefault("IBKR_CLIENT_ID", ibkrEnvOrDefault("IBKR_CLIENT_ID", "1"))
 
-	port, _ := strconv.Atoi(portStr)
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.Printf("[IBKR SETTINGS] Invalid port value %q, using default: %v", portStr, err)
+	}
 	if port == 0 {
 		port = 7497
 	}
-	clientID, _ := strconv.Atoi(clientStr)
+	clientID, err := strconv.Atoi(clientStr)
+	if err != nil {
+		log.Printf("[IBKR SETTINGS] Invalid client ID %q, using default: %v", clientStr, err)
+	}
 	if clientID == 0 {
 		clientID = 1
 	}
@@ -148,10 +154,6 @@ func (s *Server) ibkrTestHandler(w http.ResponseWriter, r *http.Request) {
 		if err := json.Unmarshal(body, &config); err != nil {
 			log.Printf("[IBKR API] Error parsing request config: %v", err)
 		}
-	}
-
-	// Save connection config to settings if provided in original request
-	if len(body) > 0 {
 		if config.Host != "" {
 			s.settingService.SetValue("IBKR_TWS_HOST", config.Host, "IBKR TWS/Gateway hostname")
 		}
