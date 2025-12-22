@@ -14,6 +14,11 @@ This microservice connects to Interactive Brokers TWS (Trader Workstation) or IB
 - **Shared Database**: Direct access to Wheeler's SQLite database
 - **Greeks & Vol Surface**: Wheeler UI now displays option Greeks (delta, gamma, theta, vega, rho) for synced positions and plots a simple volatility surface for owned strikes/expirations using Polygon snapshots when available.
 
+### Current Scope & Pending Work
+
+- The latest changes add IBKR Greeks/IV sourcing and UI source tagging.
+- Cost basis construction, assignment detection, and IBKR fee ingestion from transactions are **not yet implemented** and need a follow-up issue/implementation.
+
 ## Requirements
 
 - Python 3.10+
