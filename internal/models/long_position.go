@@ -445,8 +445,7 @@ func minInt(a, b int) int {
 }
 
 func netOptionPremium(opt *Option) float64 {
-	exit := opt.GetExitPriceValue()
-	return (opt.Premium-exit)*float64(opt.Contracts)*100 - opt.Commission
+	return opt.CalculateNetPremiumNoFees()
 }
 
 func (s *LongPositionService) shouldRecalculate(symbol string) (bool, error) {

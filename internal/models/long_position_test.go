@@ -102,14 +102,14 @@ func TestRecalculateAdjustedCostBasisForSymbol(t *testing.T) {
 		t.Fatalf("failed to fetch first position: %v", err)
 	}
 
-	// Net put premium: (1.50 - 0) * 100 - 1.00 = 149.00
-	// Net call premium: (0.50 - 0.10) * 100 - 1.00 = 39.00
-	// Total adjustment: 188.00 => adjusted total = 5000 - 188 = 4812 -> per share 48.12
-	if got := updatedFirst.AdjustedCostBasisPerShare; math.Abs(got-48.12) > 0.01 {
-		t.Fatalf("expected adjusted basis per share ~48.12, got %.2f", got)
+	// Net put premium: (1.50 - 0) * 100 = 150.00
+	// Net call premium: (0.50 - 0.10) * 100 = 40.00
+	// Total adjustment: 190.00 => adjusted total = 5000 - 190 = 4810 -> per share 48.10
+	if got := updatedFirst.AdjustedCostBasisPerShare; math.Abs(got-48.10) > 0.01 {
+		t.Fatalf("expected adjusted basis per share ~48.10, got %.2f", got)
 	}
-	if got := updatedFirst.AdjustedCostBasisTotal; math.Abs(got-4812.0) > 0.5 {
-		t.Fatalf("expected adjusted total ~4812, got %.2f", got)
+	if got := updatedFirst.AdjustedCostBasisTotal; math.Abs(got-4810.0) > 0.5 {
+		t.Fatalf("expected adjusted total ~4810, got %.2f", got)
 	}
 
 	updatedSecond, err := lpService.GetByID(second.ID)
