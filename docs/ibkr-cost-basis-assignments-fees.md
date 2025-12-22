@@ -10,4 +10,3 @@
 ## Notes
 - Track alongside existing Greeks/IV integration; can reuse the IBKR service plumbing already in place.
 - Align outputs with the acceptance criteria in the open “Integrate IBKR Option Greeks, Volatility Surface, Cost Basis, Assignment, and Fee Support” issue.
-
