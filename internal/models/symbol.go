@@ -36,6 +36,7 @@ type LongPosition struct {
 	AdjustedCostBasisPerShare float64    `json:"adjusted_cost_basis_per_share"`
 	AdjustedCostBasisTotal    float64    `json:"adjusted_cost_basis_total"`
 	ExitPrice                 *float64   `json:"exit_price"`
+	CostBasisOptions          []*Option  `json:"cost_basis_options,omitempty"`
 	CreatedAt                 time.Time  `json:"created_at"`
 	UpdatedAt                 time.Time  `json:"updated_at"`
 }
@@ -201,6 +202,16 @@ func (o *Option) CalculateMultiplier() float64 {
 		return 0
 	}
 	return o.CalculatePercentOfProfit() / percentTime
+}
+
+// CalculateNetPremiumNoFees returns the premium collected for the option excluding fees/commission.
+// This is used for cost basis adjustments where fees are ignored.
+func (o *Option) CalculateNetPremiumNoFees() float64 {
+	exit := 0.0
+	if o.ExitPrice != nil {
+		exit = *o.ExitPrice
+	}
+	return (o.Premium - exit) * float64(o.Contracts) * 100
 }
 
 // CalculateAROI calculates the Annualized Return on Investment (AROI) for the option

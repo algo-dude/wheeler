@@ -257,14 +257,15 @@
                                 <tr>
                                     <th>Purchased</th>
                                     <th>Closed Date</th>
-                                    <th>Yield</th>
-                                    <th>Shares</th>
-                                    <th>Buy Price</th>
-                                    <th>Exit Price</th>
-                                    <th>Profit/Loss</th>
-                                    <th>ROI</th>
-                                    <th>Amount</th>
-                                    <th>Total Invested</th>
+                                     <th>Yield</th>
+                                     <th>Shares</th>
+                                     <th>Buy Price</th>
+                                     <th>Cost Basis</th>
+                                     <th>Exit Price</th>
+                                     <th>Profit/Loss</th>
+                                     <th>ROI</th>
+                                     <th>Amount</th>
+                                     <th>Total Invested</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -274,37 +275,63 @@
                                     <tr>
                                         <td>{{.Opened.Format "1/2/2006"}}</td>
                                         <td>{{if .Closed}}{{.Closed.Format "1/2/2006"}}{{else}}-{{end}}</td>
-                                        <td>{{printf "%.2f" (.CalculateYield $.Dividend)}}%</td>
-                                        <td>{{.Shares}}</td>
-                                        <td>{{formatCurrencyWithDecimals .BuyPrice}}</td>
-                                        <td>{{if .ExitPrice}}{{formatCurrencyWithDecimals (.GetExitPriceValue)}}{{else}}-{{end}}</td>
-                                        <td>
-                                            {{$profitLoss := .CalculateProfitLoss $.Price}}
-                                            <span class="{{if lt $profitLoss 0.0}}negative{{else if gt $profitLoss 0.0}}positive{{else}}neutral-currency{{end}}">{{formatCurrencyWithDecimals $profitLoss}}</span>
-                                        </td>
+                                         <td>{{printf "%.2f" (.CalculateYield $.Dividend)}}%</td>
+                                         <td>{{.Shares}}</td>
+                                         <td>{{formatCurrencyWithDecimals .BuyPrice}}</td>
+                                         <td>
+                                             {{if gt .AdjustedCostBasisPerShare 0.0}}
+                                                 {{formatCurrencyWithDecimals .AdjustedCostBasisPerShare}}
+                                             {{else}}
+                                                 {{formatCurrencyWithDecimals .BuyPrice}}
+                                             {{end}}
+                                         </td>
+                                         <td>{{if .ExitPrice}}{{formatCurrencyWithDecimals (.GetExitPriceValue)}}{{else}}-{{end}}</td>
+                                         <td>
+                                             {{$profitLoss := .CalculateProfitLoss $.Price}}
+                                             <span class="{{if lt $profitLoss 0.0}}negative{{else if gt $profitLoss 0.0}}positive{{else}}neutral-currency{{end}}">{{formatCurrencyWithDecimals $profitLoss}}</span>
+                                         </td>
                                         <td>
                                             {{$roi := .CalculateROI $.Price}}
                                             <span class="{{if lt $roi 0.0}}negative{{else if gt $roi 0.0}}positive{{else}}neutral-currency{{end}}">{{printf "%.2f" $roi}}%</span>
                                         </td>
                                         <td>{{formatCurrencyWithDecimals (.CalculateAmount)}}</td>
-                                        <td>{{formatCurrencyWithDecimals (.CalculateTotalInvested)}}</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-secondary edit-long-position-btn" data-id="{{.ID}}">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
+                                         <td>{{formatCurrencyWithDecimals (.CalculateTotalInvested)}}</td>
+                                         <td>
+                                             <button class="btn btn-sm btn-secondary edit-long-position-btn" data-id="{{.ID}}">
+                                                 <i class="fas fa-edit"></i>
+                                             </button>
                                             <button class="btn btn-sm btn-danger delete-long-position-btn" data-id="{{.ID}}" style="margin-left: 5px;">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         </td>
-                                    </tr>
+                                     </tr>
+                                     {{if .CostBasisOptions}}
+                                     <tr class="cost-basis-options-row">
+                                         <td colspan="12" style="padding-top: 6px; padding-bottom: 10px;">
+                                             <div style="color: #a0a0a0; font-size: 12px; margin-bottom: 4px;">Cost basis adjustments from options:</div>
+                                             <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                                                 {{range .CostBasisOptions}}
+                                                 <div style="background: #1f2937; border: 1px solid #2d3748; border-radius: 6px; padding: 6px 8px; font-size: 12px; color: #e0e0e0;">
+                                                     <span class="{{if eq .Type "Put"}}put-badge{{else}}call-badge{{end}}" style="padding: 2px 6px; font-size: 11px; margin-right: 6px;">{{.Type}}</span>
+                                                     <span>{{.Opened.Format "01/02/2006"}}</span>
+                                                     <span style="margin-left: 8px;">Strike {{printf "%.2f" .Strike}}</span>
+                                                     <span style="margin-left: 8px;">Premium {{printf "%.2f" .Premium}}</span>
+                                                     {{if .ExitPrice}}<span style="margin-left: 8px;">Exit {{printf "%.2f" (.GetExitPriceValue)}}</span>{{end}}
+                                                     <span style="margin-left: 8px; color: #93c5fd;">Net {{formatCurrencyWithDecimals (.CalculateNetPremiumNoFees)}}</span>
+                                                 </div>
+                                                 {{end}}
+                                             </div>
+                                         </td>
+                                     </tr>
+                                     {{end}}
                                     {{end}}
                                 {{else}}
                                     <tr>
-                                        <td colspan="11" style="text-align: center; color: #a0a0a0; padding: 20px;">
-                                            No stock positions recorded for {{.Symbol}}
-                                        </td>
-                                    </tr>
-                                {{end}}
+                                         <td colspan="12" style="text-align: center; color: #a0a0a0; padding: 20px;">
+                                             No stock positions recorded for {{.Symbol}}
+                                         </td>
+                                     </tr>
+                                 {{end}}
                             </tbody>
                         </table>
                     </div>

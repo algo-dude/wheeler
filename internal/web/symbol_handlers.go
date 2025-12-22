@@ -133,6 +133,11 @@ func (s *Server) symbolHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[SYMBOL] Retrieved %d long positions for %s", len(longPositionsList), symbol)
 	}
 
+	// Attach cost-basis-adjusting options to each position for display
+	for _, position := range longPositionsList {
+		position.CostBasisOptions = costBasisAdjustingOptions(position, optionsList)
+	}
+
 	// Calculate Options Gains - sum of total profit from all closed options for this symbol
 	log.Printf("[SYMBOL] Step 6: Calculating options gains for %s", symbol)
 	var optionsGains float64
@@ -309,6 +314,50 @@ func getCompanyName(symbol string) string {
 		return name
 	}
 	return symbol + " Inc"
+}
+
+// costBasisAdjustingOptions returns options that adjust cost basis for a specific lot.
+// Heuristic rules mirror the cost basis recalculation:
+// - Cash-secured puts that were closed on the same day the lot opened (assumed assignment)
+// - Covered calls opened while the lot was active
+func costBasisAdjustingOptions(position *models.LongPosition, options []*models.Option) []*models.Option {
+	var result []*models.Option
+	for _, opt := range options {
+		switch opt.Type {
+		case "Put":
+			if opt.Closed != nil && sameDay(opt.Closed, &position.Opened) {
+				result = append(result, opt)
+			}
+		case "Call":
+			if positionActiveOn(position.Opened, position.Closed, opt.Opened) {
+				result = append(result, opt)
+			}
+		}
+	}
+	return result
+}
+
+func sameDay(a *time.Time, b *time.Time) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
+}
+
+func positionActiveOn(opened time.Time, closed *time.Time, t time.Time) bool {
+	if opened.After(t) {
+		return false
+	}
+	if closed == nil {
+		return true
+	}
+	// Include events occurring on the closing date (same treatment as cost basis engine)
+	if sameDay(closed, &t) {
+		return true
+	}
+	return closed.After(t)
 }
 
 // updateSymbolHandler handles PUT requests to update symbol data
