@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -377,6 +378,7 @@ func (s *LongPositionService) RecalculateAdjustedCostBasisForSymbol(symbol strin
 		baseTotal := p.buyPrice * float64(p.shares)
 		adjustedTotal := baseTotal - p.adjust
 		if adjustedTotal < 0 {
+			log.Printf("[COST BASIS] Adjusted cost basis below zero for symbol %s (position %d). Base=%.2f, adjustments=%.2f", symbol, p.id, baseTotal, p.adjust)
 			adjustedTotal = 0
 		}
 		var adjustedPerShare float64
@@ -407,7 +409,7 @@ func positionActiveOn(opened time.Time, closed *time.Time, t time.Time) bool {
 	if closed == nil {
 		return true
 	}
-	// Treat same day as active to include assignments on close date
+	// Treat same day as active to include assignments or rolls recorded on the closing date
 	if sameDay(closed, &t) {
 		return true
 	}
