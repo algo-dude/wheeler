@@ -293,11 +293,7 @@ func (s *Server) ibkrOwnedOptionsHandler(w http.ResponseWriter, r *http.Request)
 		if s.polygonService != nil {
 			g, gErr := s.polygonService.GetOptionGreeks(r.Context(), opt)
 			if gErr != nil {
-				if payload.Warning == "" {
-					payload.Warning = fmt.Sprintf("Greeks unavailable: %v", gErr)
-				} else {
-					payload.Warning = fmt.Sprintf("%s; Greeks unavailable: %v", payload.Warning, gErr)
-				}
+				payload.Warning = appendWarning(payload.Warning, fmt.Sprintf("Greeks unavailable: %v", gErr))
 			}
 			if g != nil {
 				// Prefer IBKR if available; otherwise use Polygon as fallback
@@ -355,6 +351,13 @@ type ibkrGreekResponse struct {
 
 func optionKey(symbol, optionType string, strike float64, expiration string) string {
 	return fmt.Sprintf("%s|%s|%.4f|%s", strings.ToUpper(symbol), strings.ToUpper(optionType), strike, expiration)
+}
+
+func appendWarning(existing, newMsg string) string {
+	if existing == "" {
+		return newMsg
+	}
+	return existing + "; " + newMsg
 }
 
 func (s *Server) fetchIBKRGreeks(ctx context.Context) (map[string]ibkrGreekOption, string) {

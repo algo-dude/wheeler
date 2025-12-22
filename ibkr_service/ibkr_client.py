@@ -160,8 +160,14 @@ class IBKRClient:
                     expiration = expiration.replace("-", "")
 
                 right = opt.get("right") or opt.get("type")
-                if right:
-                    right = right[0].upper()  # C or P
+                if isinstance(right, str):
+                    right = right.strip()
+                    if right:
+                        right = right[0].upper()
+                        if right not in ("C", "P"):
+                            right = None
+                    else:
+                        right = None
 
                 contract = Option(
                     symbol=opt["symbol"],
@@ -192,7 +198,7 @@ class IBKRClient:
         try:
             tickers = await self.ib.reqTickersAsync(*contracts)
         except Exception as e:
-            logger.error(f"Failed to request Greeks from IBKR: {e}")
+            logger.error(f"Failed to request Greeks from IBKR for %d contracts: %s", len(contracts), e)
             raise
 
         results: List[Dict[str, Any]] = []

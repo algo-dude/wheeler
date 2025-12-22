@@ -220,7 +220,12 @@ async def get_greeks(config: Optional[ConnectionConfig] = None):
         option_positions = [p for p in positions if p.get("sec_type") == "OPT"]
 
         greeks = await ibkr_client.get_option_greeks(option_positions)
-        response.options = [OptionGreek(**g) for g in greeks]
+        for g in greeks:
+            try:
+                response.options.append(OptionGreek(**g))
+            except Exception as e:
+                logger.error(f"Failed to parse Greek payload: {e}")
+                response.errors.append(str(e))
     except Exception as e:
         logger.error(f"Greek retrieval error: {e}")
         response.errors.append(str(e))
