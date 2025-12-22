@@ -1,12 +1,14 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"stonks/internal/polygon"
 	"strconv"
@@ -33,6 +35,40 @@ func getIBKRServiceURL() string {
 	return url
 }
 
+func ibkrEnvOrDefault(key, fallback string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return fallback
+}
+
+func (s *Server) ibkrConnectionConfig() IBKRConnectionConfig {
+	host := s.settingService.GetValueWithDefault("IBKR_TWS_HOST", ibkrEnvOrDefault("IBKR_TWS_HOST", "127.0.0.1"))
+	portStr := s.settingService.GetValueWithDefault("IBKR_TWS_PORT", ibkrEnvOrDefault("IBKR_TWS_PORT", "7497"))
+	clientStr := s.settingService.GetValueWithDefault("IBKR_CLIENT_ID", ibkrEnvOrDefault("IBKR_CLIENT_ID", "1"))
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.Printf("[IBKR SETTINGS] Invalid port value %q, using default: %v", portStr, err)
+		port = 7497
+	} else if port == 0 {
+		port = 7497
+	}
+	clientID, err := strconv.Atoi(clientStr)
+	if err != nil {
+		log.Printf("[IBKR SETTINGS] Invalid client ID %q, using default: %v", clientStr, err)
+		clientID = 1
+	} else if clientID == 0 {
+		clientID = 1
+	}
+
+	return IBKRConnectionConfig{
+		Host:     host,
+		Port:     port,
+		ClientID: clientID,
+	}
+}
+
 // ibkrSettingsHandler serves the IBKR settings management page
 func (s *Server) ibkrSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[IBKR SETTINGS] Handling IBKR settings page request")
@@ -44,18 +80,15 @@ func (s *Server) ibkrSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		symbols = []string{}
 	}
 
-	// Get IBKR settings from settings table
-	twsHost := s.settingService.GetValueWithDefault("IBKR_TWS_HOST", "127.0.0.1")
-	twsPort := s.settingService.GetValueWithDefault("IBKR_TWS_PORT", "7497")
-	clientID := s.settingService.GetValueWithDefault("IBKR_CLIENT_ID", "1")
+	config := s.ibkrConnectionConfig()
 
 	data := IBKRSettingsData{
 		AllSymbols:     symbols,
 		CurrentDB:      s.getCurrentDatabaseName(),
 		ActivePage:     "settings-ibkr",
-		TWS_Host:       twsHost,
-		TWS_Port:       twsPort,
-		ClientID:       clientID,
+		TWS_Host:       config.Host,
+		TWS_Port:       strconv.Itoa(config.Port),
+		ClientID:       strconv.Itoa(config.ClientID),
 		IBKRServiceURL: getIBKRServiceURL(),
 	}
 
@@ -116,9 +149,34 @@ func (s *Server) ibkrTestHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	config := s.ibkrConnectionConfig()
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &config); err != nil {
+			log.Printf("[IBKR API] Error parsing request config: %v", err)
+			http.Error(w, "Invalid configuration payload", http.StatusBadRequest)
+			return
+		}
+		if config.Host != "" {
+			s.settingService.SetValue("IBKR_TWS_HOST", config.Host, "IBKR TWS/Gateway hostname")
+		}
+		if config.Port > 0 {
+			s.settingService.SetValue("IBKR_TWS_PORT", strconv.Itoa(config.Port), "IBKR TWS/Gateway port")
+		}
+		if config.ClientID > 0 {
+			s.settingService.SetValue("IBKR_CLIENT_ID", strconv.Itoa(config.ClientID), "IBKR client ID")
+		}
+	}
+
+	payload, err := json.Marshal(config)
+	if err != nil {
+		log.Printf("[IBKR API] Failed to marshal config for test: %v", err)
+		http.Error(w, "Failed to marshal request", http.StatusInternalServerError)
+		return
+	}
+
 	// Forward request to IBKR microservice
 	serviceURL := getIBKRServiceURL() + "/api/ibkr/test"
-	resp, err := http.Post(serviceURL, "application/json", nil)
+	resp, err := http.Post(serviceURL, "application/json", bytes.NewReader(payload))
 	if err != nil {
 		log.Printf("[IBKR API] Error connecting to IBKR service: %v", err)
 		w.Header().Set("Content-Type", "application/json")
@@ -139,22 +197,6 @@ func (s *Server) ibkrTestHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save connection config to settings if provided in original request
-	if len(body) > 0 {
-		var config IBKRConnectionConfig
-		if err := json.Unmarshal(body, &config); err == nil {
-			if config.Host != "" {
-				s.settingService.SetValue("IBKR_TWS_HOST", config.Host, "IBKR TWS/Gateway hostname")
-			}
-			if config.Port > 0 {
-				s.settingService.SetValue("IBKR_TWS_PORT", strconv.Itoa(config.Port), "IBKR TWS/Gateway port")
-			}
-			if config.ClientID > 0 {
-				s.settingService.SetValue("IBKR_CLIENT_ID", strconv.Itoa(config.ClientID), "IBKR client ID")
-			}
-		}
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(responseBody)
 }
@@ -168,9 +210,17 @@ func (s *Server) ibkrSyncHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[IBKR API] Handling sync positions request")
 
+	config := s.ibkrConnectionConfig()
+	payload, err := json.Marshal(config)
+	if err != nil {
+		log.Printf("[IBKR API] Failed to marshal config for sync: %v", err)
+		http.Error(w, "Failed to marshal request", http.StatusInternalServerError)
+		return
+	}
+
 	// Forward request to IBKR microservice
 	serviceURL := getIBKRServiceURL() + "/api/ibkr/sync"
-	resp, err := http.Post(serviceURL, "application/json", nil)
+	resp, err := http.Post(serviceURL, "application/json", bytes.NewReader(payload))
 	if err != nil {
 		log.Printf("[IBKR API] Error connecting to IBKR service: %v", err)
 		w.Header().Set("Content-Type", "application/json")
@@ -362,7 +412,19 @@ func makeSurfacePoint(symbol, optionType, expiration string, expiryMs int64, str
 func (s *Server) fetchIBKRGreeks(ctx context.Context) (map[string]ibkrGreekOption, string) {
 	result := make(map[string]ibkrGreekOption)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getIBKRServiceURL()+"/api/ibkr/greeks", nil)
+	config := s.ibkrConnectionConfig()
+	query := url.Values{}
+	if config.Host != "" {
+		query.Set("host", config.Host)
+	}
+	if config.Port > 0 {
+		query.Set("port", strconv.Itoa(config.Port))
+	}
+	if config.ClientID > 0 {
+		query.Set("client_id", strconv.Itoa(config.ClientID))
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getIBKRServiceURL()+"/api/ibkr/greeks?"+query.Encode(), nil)
 	if err != nil {
 		return result, fmt.Sprintf("Failed to build IBKR Greeks request: %v", err)
 	}
