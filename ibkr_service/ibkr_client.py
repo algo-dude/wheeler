@@ -154,10 +154,15 @@ class IBKRClient:
 
         for opt in options:
             try:
-                expiration = opt.get("expiration")
-                # Normalize expiration to IBKR expected format YYYYMMDD
-                if expiration and "-" in expiration:
-                    expiration = expiration.replace("-", "")
+                expiration_raw = opt.get("expiration")
+                expiration = None
+                if isinstance(expiration_raw, str):
+                    exp_clean = expiration_raw.replace("-", "")
+                    if len(exp_clean) == 8 and exp_clean.isdigit():
+                        expiration = exp_clean
+                if expiration is None:
+                    logger.warning(f"Skipping option with invalid expiration: {expiration_raw}")
+                    continue
 
                 right = opt.get("right") or opt.get("type")
                 if isinstance(right, str):
@@ -198,7 +203,7 @@ class IBKRClient:
         try:
             tickers = await self.ib.reqTickersAsync(*contracts)
         except Exception as e:
-            logger.error(f"Failed to request Greeks from IBKR for %d contracts: %s", len(contracts), e)
+            logger.error(f"Failed to request Greeks from IBKR for {len(contracts)} contracts: {e}")
             raise
 
         results: List[Dict[str, Any]] = []

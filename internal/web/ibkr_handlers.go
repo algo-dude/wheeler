@@ -274,19 +274,9 @@ func (s *Server) ibkrOwnedOptionsHandler(w http.ResponseWriter, r *http.Request)
 			view.Greeks = g.Greeks
 			view.ImpliedVol = g.ImpliedVolatility
 			view.DataSource = "IBKR"
-			if view.ImpliedVol != nil {
-				view.SurfacePoint = &VolSurfacePoint{
-					Symbol:      opt.Symbol,
-					Strike:      opt.Strike,
-					Expiration:  view.Expiration,
-					ExpiryMs:    opt.Expiration.UnixMilli(),
-					IV:          g.ImpliedVolatility,
-					IsOwned:     true,
-					OptionType:  opt.Type,
-					Contracts:   opt.Contracts,
-					Description: fmt.Sprintf("%s %s %.2f", opt.Symbol, opt.Type, opt.Strike),
-				}
-				payload.Surface = append(payload.Surface, *view.SurfacePoint)
+			if sp := makeSurfacePoint(opt.Symbol, opt.Type, view.Expiration, opt.Expiration.UnixMilli(), opt.Strike, opt.Contracts, g.ImpliedVolatility); sp != nil {
+				view.SurfacePoint = sp
+				payload.Surface = append(payload.Surface, *sp)
 			}
 		}
 
@@ -302,19 +292,11 @@ func (s *Server) ibkrOwnedOptionsHandler(w http.ResponseWriter, r *http.Request)
 					view.ImpliedVol = g.ImpliedVolatility
 					view.DataSource = "Polygon"
 				}
-				if view.SurfacePoint == nil && g.ImpliedVolatility != nil {
-					view.SurfacePoint = &VolSurfacePoint{
-						Symbol:      opt.Symbol,
-						Strike:      opt.Strike,
-						Expiration:  view.Expiration,
-						ExpiryMs:    opt.Expiration.UnixMilli(),
-						IV:          g.ImpliedVolatility,
-						IsOwned:     true,
-						OptionType:  opt.Type,
-						Contracts:   opt.Contracts,
-						Description: fmt.Sprintf("%s %s %.2f", opt.Symbol, opt.Type, opt.Strike),
+				if view.SurfacePoint == nil {
+					if sp := makeSurfacePoint(opt.Symbol, opt.Type, view.Expiration, opt.Expiration.UnixMilli(), opt.Strike, opt.Contracts, g.ImpliedVolatility); sp != nil {
+						view.SurfacePoint = sp
+						payload.Surface = append(payload.Surface, *sp)
 					}
-					payload.Surface = append(payload.Surface, *view.SurfacePoint)
 				}
 			}
 		}
@@ -358,6 +340,23 @@ func appendWarning(existing, newMsg string) string {
 		return newMsg
 	}
 	return existing + "; " + newMsg
+}
+
+func makeSurfacePoint(symbol, optionType, expiration string, expiryMs int64, strike float64, contracts int, iv *float64) *VolSurfacePoint {
+	if iv == nil {
+		return nil
+	}
+	return &VolSurfacePoint{
+		Symbol:      symbol,
+		Strike:      strike,
+		Expiration:  expiration,
+		ExpiryMs:    expiryMs,
+		IV:          iv,
+		IsOwned:     true,
+		OptionType:  optionType,
+		Contracts:   contracts,
+		Description: fmt.Sprintf("%s %s %.2f", symbol, optionType, strike),
+	}
 }
 
 func (s *Server) fetchIBKRGreeks(ctx context.Context) (map[string]ibkrGreekOption, string) {
