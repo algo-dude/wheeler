@@ -29,7 +29,11 @@ func (s *LongPositionService) Create(symbol string, opened time.Time, shares int
 		return nil, fmt.Errorf("failed to create long position: %w", err)
 	}
 
-	return &position, nil
+	if err := s.RecalculateAdjustedCostBasisForSymbol(symbol); err != nil {
+		return nil, fmt.Errorf("failed to recalculate cost basis after create: %w", err)
+	}
+
+	return s.GetByID(position.ID)
 }
 
 func (s *LongPositionService) GetBySymbol(symbol string) ([]*LongPosition, error) {
@@ -150,12 +154,12 @@ func (s *LongPositionService) GetByID(id int) (*LongPosition, error) {
 // UpdateByID updates a long position by its ID
 func (s *LongPositionService) UpdateByID(id int, symbol string, opened time.Time, shares int, buyPrice float64, closed *time.Time, exitPrice *float64) (*LongPosition, error) {
 	query := `UPDATE long_positions 
-			  SET symbol = ?, opened = ?, shares = ?, buy_price = ?, adjusted_cost_basis_per_share = ?, adjusted_cost_basis_total = ?, closed = ?, exit_price = ?, updated_at = CURRENT_TIMESTAMP 
+			  SET symbol = ?, opened = ?, shares = ?, buy_price = ?, closed = ?, exit_price = ?, updated_at = CURRENT_TIMESTAMP 
 			  WHERE id = ? 
 			  RETURNING id, symbol, opened, closed, shares, buy_price, adjusted_cost_basis_per_share, adjusted_cost_basis_total, exit_price, created_at, updated_at`
 
 	var position LongPosition
-	err := s.db.QueryRow(query, symbol, opened, shares, buyPrice, buyPrice, buyPrice*float64(shares), closed, exitPrice, id).Scan(
+	err := s.db.QueryRow(query, symbol, opened, shares, buyPrice, closed, exitPrice, id).Scan(
 		&position.ID, &position.Symbol, &position.Opened, &position.Closed, &position.Shares,
 		&position.BuyPrice, &position.AdjustedCostBasisPerShare, &position.AdjustedCostBasisTotal, &position.ExitPrice, &position.CreatedAt, &position.UpdatedAt,
 	)
@@ -166,7 +170,11 @@ func (s *LongPositionService) UpdateByID(id int, symbol string, opened time.Time
 		return nil, fmt.Errorf("failed to update long position: %w", err)
 	}
 
-	return &position, nil
+	if err := s.RecalculateAdjustedCostBasisForSymbol(symbol); err != nil {
+		return nil, fmt.Errorf("failed to recalculate cost basis after update: %w", err)
+	}
+
+	return s.GetByID(position.ID)
 }
 
 // DeleteByID deletes a long position by its ID
@@ -379,7 +387,7 @@ func (s *LongPositionService) RecalculateAdjustedCostBasisForSymbol(symbol strin
 		adjustedTotal := baseTotal - p.adjust
 		if adjustedTotal < 0 {
 			log.Printf("[COST BASIS] Adjusted cost basis below zero for symbol %s (position %d). Base=%.2f, adjustments=%.2f", symbol, p.id, baseTotal, p.adjust)
-			adjustedTotal = 0
+			adjustedTotal = baseTotal
 		}
 		var adjustedPerShare float64
 		if p.shares > 0 {
