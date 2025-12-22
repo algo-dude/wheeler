@@ -50,6 +50,7 @@ func (s *Server) ibkrConnectionConfig() IBKRConnectionConfig {
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		log.Printf("[IBKR SETTINGS] Invalid port value %q, using default: %v", portStr, err)
+		port = 7497
 	}
 	if port == 0 {
 		port = 7497
@@ -57,6 +58,7 @@ func (s *Server) ibkrConnectionConfig() IBKRConnectionConfig {
 	clientID, err := strconv.Atoi(clientStr)
 	if err != nil {
 		log.Printf("[IBKR SETTINGS] Invalid client ID %q, using default: %v", clientStr, err)
+		clientID = 1
 	}
 	if clientID == 0 {
 		clientID = 1
@@ -165,7 +167,12 @@ func (s *Server) ibkrTestHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	payload, _ := json.Marshal(config)
+	payload, err := json.Marshal(config)
+	if err != nil {
+		log.Printf("[IBKR API] Failed to marshal config for test: %v", err)
+		http.Error(w, "Failed to marshal request", http.StatusInternalServerError)
+		return
+	}
 
 	// Forward request to IBKR microservice
 	serviceURL := getIBKRServiceURL() + "/api/ibkr/test"
@@ -204,7 +211,12 @@ func (s *Server) ibkrSyncHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[IBKR API] Handling sync positions request")
 
 	config := s.ibkrConnectionConfig()
-	payload, _ := json.Marshal(config)
+	payload, err := json.Marshal(config)
+	if err != nil {
+		log.Printf("[IBKR API] Failed to marshal config for sync: %v", err)
+		http.Error(w, "Failed to marshal request", http.StatusInternalServerError)
+		return
+	}
 
 	// Forward request to IBKR microservice
 	serviceURL := getIBKRServiceURL() + "/api/ibkr/sync"
