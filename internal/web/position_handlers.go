@@ -384,6 +384,8 @@ func (s *Server) createLongPositionHandler(w http.ResponseWriter, r *http.Reques
 		position, _ = s.longPositionService.GetByID(position.ID)
 	}
 
+	s.recalculateAdjustedCostBasis(req.Symbol)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(position)
 }
@@ -427,6 +429,8 @@ func (s *Server) updateLongPositionHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	s.recalculateAdjustedCostBasis(req.Symbol)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(position)
 }
@@ -462,6 +466,8 @@ func (s *Server) deleteLongPositionHandler(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
+
+	s.recalculateAdjustedCostBasis(req.Symbol)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"success": true}`))

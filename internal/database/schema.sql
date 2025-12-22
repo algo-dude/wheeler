@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS long_positions (
     closed DATE,
     shares INTEGER NOT NULL,
     buy_price REAL NOT NULL,
+    adjusted_cost_basis_per_share REAL NOT NULL DEFAULT 0.0,
+    adjusted_cost_basis_total REAL NOT NULL DEFAULT 0.0,
     exit_price REAL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

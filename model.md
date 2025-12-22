@@ -32,6 +32,8 @@ Represents long stock positions, often resulting from put option assignments in 
 - closed (DATE) - Date position was closed (null if still open)
 - shares (INTEGER) - Number of shares held
 - buy_price (REAL) - Price per share at purchase
+- adjusted_cost_basis_per_share (REAL) - Cost basis per share after applying option premium adjustments
+- adjusted_cost_basis_total (REAL) - Total lot basis after adjustments
 - exit_price (REAL) - Price per share at sale (null if still open)
 - created_at (DATETIME) - Record creation timestamp (default: CURRENT_TIMESTAMP)
 - updated_at (DATETIME) - Record update timestamp (default: CURRENT_TIMESTAMP)
@@ -292,4 +294,3 @@ Multiplier Gradient:
 - Fair (≥0.5): #d8cf4c (bright yellow)
 - Poor (≥0.0): #e49a58 (bright orange)
 - Losing (<0.0): #f16565 (bright red)
-
