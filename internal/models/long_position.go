@@ -349,9 +349,7 @@ func (s *LongPositionService) RecalculateAdjustedCostBasisForSymbol(symbol strin
 				continue
 			}
 			if sameDay(opt.Closed, &p.opened) {
-				exit := opt.GetExitPriceValue()
-				netPremium := (opt.Premium - exit) * float64(opt.Contracts) * 100
-				netPremium -= opt.Commission
+				netPremium := netOptionPremium(opt)
 				p.adjust += netPremium
 			}
 		}
@@ -360,9 +358,7 @@ func (s *LongPositionService) RecalculateAdjustedCostBasisForSymbol(symbol strin
 	// Apply covered call premiums to lots that were active when the calls were opened
 	for _, opt := range callOptions {
 		remainingCoverage := opt.Contracts * 100
-		exit := opt.GetExitPriceValue()
-		netPremium := (opt.Premium - exit) * float64(opt.Contracts) * 100
-		netPremium -= opt.Commission
+		netPremium := netOptionPremium(opt)
 		if netPremium == 0 || remainingCoverage == 0 {
 			continue
 		}
@@ -387,7 +383,7 @@ func (s *LongPositionService) RecalculateAdjustedCostBasisForSymbol(symbol strin
 		adjustedTotal := baseTotal - p.adjust
 		if adjustedTotal < 0 {
 			log.Printf("[COST BASIS] Adjusted cost basis below zero for symbol %s (position %d). Base=%.2f, adjustments=%.2f", symbol, p.id, baseTotal, p.adjust)
-			adjustedTotal = baseTotal
+			adjustedTotal = 0
 		}
 		var adjustedPerShare float64
 		if p.shares > 0 {
@@ -429,4 +425,9 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func netOptionPremium(opt *Option) float64 {
+	exit := opt.GetExitPriceValue()
+	return (opt.Premium-exit)*float64(opt.Contracts)*100 - opt.Commission
 }
