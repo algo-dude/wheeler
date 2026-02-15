@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryName="Wheeler Test Query" type="AF">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U1234567" fromDate="2024-01-01" toDate="2024-12-30">
+      
+      <!-- Stock and Option Trades -->
+      <Trades>
+        <!-- Stock BUY trade -->
+        <Trade 
+          accountId="U1234567"
+          conid="265598"
+          symbol="AAPL"
+          assetCategory="STK"
+          exchange="SMART"
+          currency="USD"
+          tradeDate="20240115"
+          tradeTime="10:30:00"
+          buySell="BUY"
+          quantity="100"
+          tradePrice="185.50"
+          ibExecID="0001234567.65432.01"
+          ibOrderID="12345678"
+          permID="111222333"
+          ibCommission="-1.00"
+          ibCommissionCurrency="USD"
+          realizedPnL="0"
+          multiplier="1"
+        />
+        
+        <!-- Stock SELL trade -->
+        <Trade 
+          accountId="U1234567"
+          conid="265598"
+          symbol="AAPL"
+          assetCategory="STK"
+          exchange="ARCA"
+          currency="USD"
+          tradeDate="20240315"
+          tradeTime="14:22:30"
+          buySell="SELL"
+          quantity="50"
+          tradePrice="192.75"
+          ibExecID="0001234567.78901.01"
+          ibOrderID="23456789"
+          permID="222333444"
+          ibCommission="-0.50"
+          ibCommissionCurrency="USD"
+          realizedPnL="362.50"
+          multiplier="1"
+        />
+        
+        <!-- PUT Option SELL (write a put) -->
+        <Trade 
+          accountId="U1234567"
+          conid="567891234"
+          symbol="AAPL"
+          underlyingSymbol="AAPL"
+          assetCategory="OPT"
+          exchange="CBOE"
+          currency="USD"
+          tradeDate="20240201"
+          tradeTime="09:45:00"
+          buySell="SELL"
+          quantity="1"
+          tradePrice="2.50"
+          ibExecID="0001234567.11111.01"
+          ibOrderID="34567890"
+          permID="333444555"
+          ibCommission="-1.05"
+          ibCommissionCurrency="USD"
+          realizedPnL="0"
+          multiplier="100"
+          putCall="P"
+          strike="180.00"
+          expiry="20240315"
+        />
+        
+        <!-- CALL Option BUY (buy to close) -->
+        <Trade 
+          accountId="U1234567"
+          conid="678912345"
+          symbol="TSLA"
+          underlyingSymbol="TSLA"
+          assetCategory="OPT"
+          exchange="PHLX"
+          currency="USD"
+          tradeDate="20240220"
+          tradeTime="11:15:45"
+          buySell="BUY"
+          quantity="2"
+          tradePrice="5.25"
+          ibExecID="0001234567.22222.01"
+          ibOrderID="45678901"
+          permID="444555666"
+          ibCommission="-2.10"
+          ibCommissionCurrency="USD"
+          realizedPnL="-150.00"
+          multiplier="100"
+          putCall="C"
+          strike="250.00"
+          expiry="20240419"
+        />
+        
+        <!-- Trade with alternative field names (older Flex format) -->
+        <Trade 
+          accountId="U1234567"
+          conid="789012345"
+          symbol="MSFT"
+          secType="STK"
+          exchange="NYSE"
+          currency="USD"
+          dateTime="20240310;16:00:00"
+          side="BOT"
+          quantity="25"
+          price="420.00"
+          tradeID="ALT-EXEC-001"
+          orderID="56789012"
+          commission="-0.75"
+          multiplier="1"
+        />
+      </Trades>
+      
+      <!-- Cash Transactions (Dividends, Fees, etc.) -->
+      <CashTransactions>
+        <!-- Dividend Payment -->
+        <CashTransaction
+          accountId="U1234567"
+          type="Dividends"
+          amount="24.00"
+          symbol="AAPL"
+          conid="265598"
+          currency="USD"
+          dateTime="20240215;00:00:00"
+          description="AAPL(US0378331005) CASH DIVIDEND USD 0.24 PER SHARE (Ordinary Dividend)"
+        />
+        
+        <!-- Dividend Payment - Different format -->
+        <CashTransaction
+          accountId="U1234567"
+          type="DIVIDEND"
+          amount="15.50"
+          symbol="MSFT"
+          conid="272093"
+          currency="USD"
+          dateTime="20240314"
+          description="MSFT(US5949181045) CASH DIVIDEND USD 0.62 PER SHARE"
+        />
+        
+        <!-- Withholding Tax -->
+        <CashTransaction
+          accountId="U1234567"
+          type="Withholding Tax"
+          amount="-3.60"
+          symbol="AAPL"
+          conid="265598"
+          currency="USD"
+          dateTime="20240215;00:00:00"
+          description="AAPL(US0378331005) CASH DIVIDEND USD 0.24 PER SHARE - US TAX"
+        />
+        
+        <!-- Payment in Lieu of Dividends -->
+        <CashTransaction
+          accountId="U1234567"
+          type="Payment In Lieu Of Dividends"
+          amount="12.00"
+          symbol="AMD"
+          conid="4391"
+          currency="USD"
+          dateTime="20240320;00:00:00"
+          description="AMD(US0079031078) PAYMENT IN LIEU OF DIVIDEND"
+        />
+        
+        <!-- Broker Interest -->
+        <CashTransaction
+          accountId="U1234567"
+          type="Broker Interest Received"
+          amount="45.67"
+          symbol=""
+          conid=""
+          currency="USD"
+          dateTime="20240401;00:00:00"
+          description="USD CREDIT INT FOR MAR-2024"
+        />
+        
+        <!-- Commission Adjustment -->
+        <CashTransaction
+          accountId="U1234567"
+          type="Commission Adjustments"
+          amount="0.50"
+          symbol="AAPL"
+          conid="265598"
+          currency="USD"
+          dateTime="20240405;00:00:00"
+          description="Commission adjustment for trade rebate"
+        />
+        
+        <!-- Transfer -->
+        <CashTransaction
+          accountId="U1234567"
+          type="Deposits/Withdrawals"
+          amount="10000.00"
+          symbol=""
+          conid=""
+          currency="USD"
+          dateTime="20240101;00:00:00"
+          description="ELECTRONIC FUND TRANSFER"
+        />
+      </CashTransactions>
+      
+      <!-- Corporate Actions (Assignments, Exercises, Expirations) -->
+      <CorporateActions>
+        <!-- Option Assignment -->
+        <CorporateAction
+          accountId="U1234567"
+          type="TC"
+          actionDescription="Option Assignment"
+          symbol="AAPL"
+          conid="567891234"
+          currency="USD"
+          dateTime="20240316"
+          quantity="100"
+          proceeds="-18000.00"
+          description="AAPL 15MAR24 180.0 P assigned"
+        />
+        
+        <!-- Option Assignment (AS code) -->
+        <CorporateAction
+          accountId="U1234567"
+          type="AS"
+          actionDescription="Assignment"
+          symbol="TSLA"
+          conid="891234567"
+          currency="USD"
+          dateTime="20240420"
+          quantity="-200"
+          proceeds="50000.00"
+          description="TSLA 19APR24 250.0 C assigned"
+        />
+        
+        <!-- Option Exercise -->
+        <CorporateAction
+          accountId="U1234567"
+          type="EX"
+          actionDescription="Option Exercise"
+          symbol="NVDA"
+          conid="456789012"
+          currency="USD"
+          dateTime="20240621"
+          quantity="50"
+          proceeds="-30000.00"
+          description="NVDA 21JUN24 600.0 C exercised"
+        />
+        
+        <!-- Option Expiration -->
+        <CorporateAction
+          accountId="U1234567"
+          type="EP"
+          actionDescription="Option Expiration"
+          symbol="SPY"
+          conid="234567890"
+          currency="USD"
+          dateTime="20240517"
+          quantity="5"
+          proceeds="0"
+          description="SPY 17MAY24 510.0 P expired worthless"
+        />
+        
+        <!-- Stock Split (OTHER activity) -->
+        <CorporateAction
+          accountId="U1234567"
+          type="FS"
+          actionDescription="Forward Stock Split"
+          symbol="NVDA"
+          conid="4815747"
+          currency="USD"
+          dateTime="20240610"
+          quantity="900"
+          value="0"
+          description="NVDA 10-for-1 stock split"
+        />
+        
+        <!-- Dividend via Corporate Action -->
+        <CorporateAction
+          accountId="U1234567"
+          type="DI"
+          actionDescription="Dividend"
+          symbol="KO"
+          conid="8894"
+          currency="USD"
+          dateTime="20240701"
+          amount="18.50"
+          description="KO quarterly dividend"
+        />
+      </CorporateActions>
+      
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

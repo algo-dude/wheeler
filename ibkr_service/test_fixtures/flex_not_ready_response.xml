@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatementResponse>
+  <Status>1019</Status>
+  <ErrorMessage>Statement is being generated. Please try again shortly.</ErrorMessage>
+</FlexStatementResponse>

@@ -8,6 +8,70 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css?v=2">
+    <style>
+        /* Greeks Panel Styles */
+        .greeks-panel {
+            background: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .greeks-status {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            background: #1e1e1e;
+        }
+
+        .greeks-status.warning {
+            color: #f39c12;
+            background: #3d3100;
+            border: 1px solid #f39c12;
+        }
+
+        .greeks-status.error {
+            color: #e74c3c;
+            background: #3d0000;
+            border: 1px solid #e74c3c;
+        }
+
+        .greeks-status.success {
+            color: #27ae60;
+            background: #003d1a;
+            border: 1px solid #27ae60;
+        }
+
+        #greeksTable th, #greeksTable td {
+            padding: 10px 12px;
+            text-align: center;
+        }
+
+        .source-badge {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .source-badge.ibkr {
+            background: #1a5490;
+            color: #fff;
+        }
+
+        .source-badge.polygon {
+            background: #6c3483;
+            color: #fff;
+        }
+
+        .source-badge.unavailable {
+            background: #555;
+            color: #aaa;
+        }
+    </style>
 </head>
 <body class="symbol-page">
     <div class="app-container">
@@ -238,6 +302,43 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Greeks Panel - Only show if there are options -->
+                {{if .OptionsList}}
+                <div class="greeks-panel" id="greeksPanel" style="margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <div class="section-subtitle" style="font-size: 16px; color: #e0e0e0;">
+                            <i class="fas fa-calculator" style="margin-right: 8px; color: #3498db;"></i>
+                            Option Greeks (Open Positions)
+                        </div>
+                        <button id="fetchGreeksBtn" class="btn btn-secondary">
+                            <i class="fas fa-download"></i>
+                            Fetch Greeks
+                        </button>
+                    </div>
+                    <div id="greeksStatus" class="greeks-status" style="display:none;"></div>
+                    <div class="table-container-scrollable" id="greeksTableContainer" style="display:none;">
+                        <table class="financial-table" id="greeksTable">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Strike</th>
+                                    <th>Expiration</th>
+                                    <th>Contracts</th>
+                                    <th>Delta</th>
+                                    <th>Gamma</th>
+                                    <th>Theta</th>
+                                    <th>Vega</th>
+                                    <th>IV</th>
+                                    <th>Source</th>
+                                </tr>
+                            </thead>
+                            <tbody id="greeksTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {{end}}
             </div>
             
             <!-- Stock Positions & Dividends - Side by Side -->
@@ -1697,8 +1798,97 @@
                     window.history.replaceState({}, document.title, newUrl);
                 });
         }
+
+        // Greeks functionality
+        const fetchGreeksBtn = document.getElementById('fetchGreeksBtn');
+        if (fetchGreeksBtn) {
+            fetchGreeksBtn.addEventListener('click', function() {
+                fetchGreeksForSymbol('{{.Symbol}}');
+            });
+        }
         
         }); // End of DOMContentLoaded
+
+        // Greeks fetch function (outside DOMContentLoaded to be accessible)
+        function fetchGreeksForSymbol(symbol) {
+            const btn = document.getElementById('fetchGreeksBtn');
+            const status = document.getElementById('greeksStatus');
+            const container = document.getElementById('greeksTableContainer');
+            const tbody = document.getElementById('greeksTableBody');
+            
+            if (!btn || !status || !container || !tbody) {
+                console.log('Greeks panel elements not found');
+                return;
+            }
+            
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...';
+            
+            status.style.display = 'block';
+            status.textContent = 'Fetching Greeks from IBKR...';
+            status.className = 'greeks-status';
+
+            fetch(`/api/ibkr/symbol-greeks?symbol=${encodeURIComponent(symbol)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.warning) {
+                        status.textContent = data.warning;
+                        status.className = 'greeks-status warning';
+                    }
+                    
+                    if (!data.options || data.options.length === 0) {
+                        status.textContent = 'No open options found for this symbol.';
+                        status.className = 'greeks-status';
+                        container.style.display = 'none';
+                        return;
+                    }
+
+                    // Render Greeks table
+                    tbody.innerHTML = data.options.map(opt => {
+                        const g = opt.greeks || {};
+                        const iv = opt.implied_volatility != null 
+                            ? (opt.implied_volatility * 100).toFixed(2) + '%' 
+                            : 'N/A';
+                        return `
+                            <tr>
+                                <td><span class="${opt.type === 'Put' ? 'put-badge' : 'call-badge'}">${opt.type === 'Put' ? 'P' : 'C'}</span></td>
+                                <td>$${Number(opt.strike).toFixed(2)}</td>
+                                <td>${opt.expiration}</td>
+                                <td>${opt.contracts}</td>
+                                <td>${formatGreekValue(g.delta)}</td>
+                                <td>${formatGreekValue(g.gamma)}</td>
+                                <td>${formatGreekValue(g.theta)}</td>
+                                <td>${formatGreekValue(g.vega)}</td>
+                                <td>${iv}</td>
+                                <td><span class="source-badge ${(opt.data_source || 'N/A').toLowerCase()}">${opt.data_source || 'N/A'}</span></td>
+                            </tr>
+                        `;
+                    }).join('');
+                    
+                    container.style.display = 'block';
+                    if (!data.warning) {
+                        status.textContent = `Greeks loaded for ${data.options.length} open option(s). Source: ${data.options[0]?.data_source || 'N/A'}`;
+                        status.className = 'greeks-status success';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching Greeks:', error);
+                    status.textContent = 'Error fetching Greeks: ' + error.message;
+                    status.className = 'greeks-status error';
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                });
+        }
+
+        function formatGreekValue(value, decimals = 4) {
+            if (value === null || value === undefined || isNaN(value)) {
+                return 'N/A';
+            }
+            return Number(value).toFixed(decimals);
+        }
     </script>
     <script src="/static/js/navigation.js"></script>
     <script src="/static/js/symbol-modal.js"></script>

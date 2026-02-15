@@ -79,15 +79,21 @@ type CSVTreasuryRecord struct {
 
 // DashboardData holds data for the dashboard template
 type DashboardData struct {
-	Symbols         []string        `json:"symbols"`
-	AllSymbols      []string        `json:"allSymbols"`     // For navigation compatibility
-	SymbolSummaries []SymbolSummary `json:"symbolSummaries"`
-	LongByTicker    []ChartData     `json:"longByTicker"`
-	PutsByTicker    []ChartData     `json:"putsByTicker"`
-	TotalAllocation []ChartData     `json:"totalAllocation"`
-	Totals          DashboardTotals `json:"totals"`
-	CurrentDB       string          `json:"currentDB"`
-	ActivePage      string          `json:"activePage"`
+	Symbols          []string          `json:"symbols"`
+	AllSymbols       []string          `json:"allSymbols"`       // For navigation compatibility
+	SymbolSummaries  []SymbolSummary   `json:"symbolSummaries"`
+	LongByTicker     []ChartData       `json:"longByTicker"`
+	PutsByTicker     []ChartData       `json:"putsByTicker"`
+	TotalAllocation  []ChartData       `json:"totalAllocation"`
+	Totals           DashboardTotals   `json:"totals"`
+	CurrentDB        string            `json:"currentDB"`
+	ActivePage       string            `json:"activePage"`
+	IBKRAccounts     []string          `json:"ibkrAccounts"`       // All distinct IBKR accounts
+	SelectedAccounts []string          `json:"selectedAccounts"`   // Currently selected accounts for filtering
+	HasIBKRData      bool              `json:"hasIBKRData"`        // Whether any IBKR data exists
+	AccountNicknames map[string]string `json:"accountNicknames"`   // Map of account ID to nickname
+	AccountMargins   map[string]float64 `json:"accountMargins"`    // Maintenance margin by account
+	TotalMargin      float64           `json:"totalMargin"`        // Total maintenance margin across all accounts
 }
 
 type SymbolSummary struct {

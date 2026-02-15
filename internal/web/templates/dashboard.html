@@ -51,6 +51,39 @@
         <!-- Main Content -->
         <div class="main-content" style="display: flex; flex-direction: column; height: calc(100vh - 40px);">
             
+            {{if .HasIBKRData}}
+            <!-- IBKR Account Filter (moved to top) -->
+            <div class="content-section" style="margin-bottom: 15px; flex-shrink: 0;">
+                <div style="background: #2d2d2d; padding: 10px 15px; border-radius: 8px; border: 1px solid #404040; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <span style="color: #a0a0a0; font-size: 14px;"><i class="fas fa-filter"></i> IBKR Accounts:</span>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        {{$selectedAccounts := .SelectedAccounts}}
+                        {{$nicknames := .AccountNicknames}}
+                        {{$margins := .AccountMargins}}
+                        {{range $account := .IBKRAccounts}}
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; color: #e0e0e0; font-size: 13px;">
+                            <input type="checkbox" class="account-filter-checkbox" value="{{$account}}" 
+                                   {{range $selectedAccounts}}{{if eq . $account}}checked{{end}}{{end}}
+                                   style="accent-color: #27ae60;">
+                            {{$account}}{{if index $nicknames $account}} - {{index $nicknames $account}}{{end}}{{if index $margins $account}} <span style="color: #e74c3c; font-size: 11px; margin-left: 3px;">(Margin: {{formatCurrency (index $margins $account)}})</span>{{end}}
+                        </label>
+                        {{end}}
+                    </div>
+                    {{if .SelectedAccounts}}
+                    <button id="clearAccountFilter" style="background: #666; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; margin-left: auto;">
+                        Clear
+                    </button>
+                    {{end}}
+                    {{if gt .TotalMargin 0.0}}
+                    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px; padding-left: 15px; border-left: 1px solid #404040;">
+                        <span style="color: #a0a0a0; font-size: 14px;"><i class="fas fa-chart-line"></i> Total Margin:</span>
+                        <span style="color: #e74c3c; font-weight: 600; font-size: 14px;">{{formatCurrency .TotalMargin}}</span>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+
             <!-- Dashboard Totals Panel -->
             <div class="content-section" style="margin-bottom: 20px; flex-shrink: 0;">
                 <div style="background: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #404040; text-align: center; font-size: 20px;">
@@ -471,6 +504,35 @@
         document.addEventListener('DOMContentLoaded', applyWatchlistTableColoring);
         // Also apply coloring immediately in case DOMContentLoaded already fired
         applyWatchlistTableColoring();
+
+        // IBKR Account Filter functionality - auto-apply on checkbox change
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkboxes = document.querySelectorAll('.account-filter-checkbox');
+            const clearBtn = document.getElementById('clearAccountFilter');
+            
+            // Auto-apply filter when any checkbox is clicked
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const selectedCheckboxes = document.querySelectorAll('.account-filter-checkbox:checked');
+                    const selectedAccounts = Array.from(selectedCheckboxes).map(cb => cb.value);
+                    
+                    // Build URL with selected accounts
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('account');
+                    selectedAccounts.forEach(acc => url.searchParams.append('account', acc));
+                    
+                    window.location.href = url.toString();
+                });
+            });
+            
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function() {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('account');
+                    window.location.href = url.toString();
+                });
+            }
+        });
 
         console.log('Static dashboard loaded with matching spreadsheet data');
     </script>

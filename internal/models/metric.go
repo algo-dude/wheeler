@@ -368,9 +368,9 @@ func (ms *MetricService) calculateLongCountForDate(date time.Time) (float64, err
 func (ms *MetricService) calculatePutExposureForDate(date time.Time) (float64, error) {
 	// Query for put options that were active on the given date
 	// Active means: opened <= date AND (closed IS NULL OR closed > date) AND type = 'Put'
-	// Exposure = strike * contracts * 100 (standard option contract multiplier)
+	// Exposure = strike * ABS(contracts) * 100 (standard option contract multiplier)
 	query := `
-		SELECT COALESCE(SUM(strike * contracts * 100), 0) as total_exposure
+		SELECT COALESCE(SUM(strike * ABS(contracts) * 100), 0) as total_exposure
 		FROM options 
 		WHERE date(opened) <= date(?) 
 		AND (closed IS NULL OR date(closed) > date(?))
@@ -391,9 +391,9 @@ func (ms *MetricService) calculatePutExposureForDate(date time.Time) (float64, e
 func (ms *MetricService) calculateOpenPutPremiumForDate(date time.Time) (float64, error) {
 	// Query for put options that were active on the given date
 	// Active means: opened <= date AND (closed IS NULL OR closed > date) AND type = 'Put'
-	// Premium value = premium * contracts * 100 (standard option contract multiplier)
+	// Premium value = premium * ABS(contracts) * 100 (standard option contract multiplier)
 	query := `
-		SELECT COALESCE(SUM(premium * contracts * 100), 0) as total_premium
+		SELECT COALESCE(SUM(premium * ABS(contracts) * 100), 0) as total_premium
 		FROM options 
 		WHERE date(opened) <= date(?) 
 		AND (closed IS NULL OR date(closed) > date(?))
@@ -436,9 +436,9 @@ func (ms *MetricService) calculateOpenPutCountForDate(date time.Time) (float64, 
 func (ms *MetricService) calculateOpenCallPremiumForDate(date time.Time) (float64, error) {
 	// Query for call options that were active on the given date
 	// Active means: opened <= date AND (closed IS NULL OR closed > date) AND type = 'Call'
-	// Premium value = premium * contracts * 100 (standard option contract multiplier)
+	// Premium value = premium * ABS(contracts) * 100 (standard option contract multiplier)
 	query := `
-		SELECT COALESCE(SUM(premium * contracts * 100), 0) as total_premium
+		SELECT COALESCE(SUM(premium * ABS(contracts) * 100), 0) as total_premium
 		FROM options 
 		WHERE date(opened) <= date(?) 
 		AND (closed IS NULL OR date(closed) > date(?))

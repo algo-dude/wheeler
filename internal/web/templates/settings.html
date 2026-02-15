@@ -435,6 +435,11 @@
         });
 
         function showNotification(message, type) {
+            if (type === 'error' && window.WheelerNotifications && typeof window.WheelerNotifications.addError === 'function') {
+                window.WheelerNotifications.addError(message);
+                return;
+            }
+
             const notification = document.createElement('div');
             notification.className = `notification ${type}`;
             notification.innerHTML = `

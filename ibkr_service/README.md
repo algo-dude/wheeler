@@ -4,12 +4,13 @@ A Python microservice for integrating Interactive Brokers with Wheeler portfolio
 
 ## Overview
 
-This microservice connects to Interactive Brokers TWS (Trader Workstation) or IB Gateway using the `ib_async` library to sync positions with Wheeler's SQLite database.
+This microservice connects to Interactive Brokers TWS (Trader Workstation) or IB Gateway using the `ib_async` library to sync positions with Wheeler's SQLite database. It also supports IBKR Flex Web Service for importing historical transaction data.
 
 ## Features
 
 - **Connection Management**: Connect/disconnect from TWS/Gateway
 - **Position Sync**: Import stock and options positions from IBKR
+- **Flex Query Sync**: Import historical transactions, assignments, exercises, and fees via Flex Web Service
 - **Status Monitoring**: Check connection status and sync history
 - **Shared Database**: Direct access to Wheeler's SQLite database
 - **Greeks & Vol Surface**: Wheeler UI now displays option Greeks (delta, gamma, theta, vega, rho) for synced positions and plots a simple volatility surface for owned strikes/expirations using Polygon snapshots when available.
@@ -17,7 +18,8 @@ This microservice connects to Interactive Brokers TWS (Trader Workstation) or IB
 ### Current Scope & Pending Work
 
 - The latest changes add IBKR Greeks/IV sourcing and UI source tagging.
-- Cost basis construction, assignment detection, and IBKR fee ingestion from transactions are **not yet implemented** and need a follow-up issue/implementation.
+- Flex Web Service integration provides statement-level data (assignments, exercises, expirations, fees).
+- Cost basis construction from IBKR transactions is **not yet implemented** and needs a follow-up issue/implementation.
 
 ## Requirements
 
@@ -34,7 +36,11 @@ Environment variables:
 | `IBKR_TWS_HOST` | `127.0.0.1` | TWS/Gateway hostname |
 | `IBKR_TWS_PORT` | `7497` | TWS/Gateway port |
 | `IBKR_CLIENT_ID` | `1` | Unique client ID |
-| `IBKR_DATABASE_PATH` | `/app/data/wheeler.db` | Path to Wheeler's SQLite database |
+| `IBKR_DATABASE_PATH` | *(unset)* | Optional explicit path to Wheeler's SQLite database. If unset, the service reads `data/currentdb` and writes to `data/<active_db>` |
+| `IBKR_DATA_DIR` | *(unset)* | Optional override for the directory containing `currentdb` + DB files (defaults to `./data` in the container or `../data` in the repo) |
+| `WHEELER_DATA_DIR` | *(unset)* | Alias for `IBKR_DATA_DIR` |
+| `IBKR_FLEX_TOKEN` | *(unset)* | Flex Web Service token from IBKR Account Management |
+| `IBKR_FLEX_QUERY_ID` | *(unset)* | Flex Query ID from IBKR Account Management |
 | `IBKR_SERVICE_HOST` | `0.0.0.0` | Service bind address |
 | `IBKR_SERVICE_PORT` | `8081` | Service port |
 
@@ -82,6 +88,100 @@ Returns option Greeks and implied volatility for positions currently held in IBK
 POST /api/ibkr/disconnect
 ```
 Disconnects from TWS/Gateway.
+
+---
+
+## Flex Query Support
+
+### What Are Flex Queries?
+
+IBKR Flex Web Service is a powerful API for retrieving historical account data. Unlike the real-time API (which requires TWS/Gateway running), Flex Queries can pull statement-level data directly from IBKR servers.
+
+**Key benefits:**
+- **No TWS/Gateway required**: Works without running trading software
+- **Historical data**: Access past transactions, not just current positions
+- **Statement-level events**: Captures assignments, exercises, expirations, and fees
+- **Complementary to real-time sync**: Use both together for complete data
+
+### Data Provided by Flex Queries
+
+| Data Type | Description | Maps To |
+|-----------|-------------|---------|
+| Trades | Execution records (buys/sells) | `ibkr_executions` |
+| Commissions | Fee details per trade | `ibkr_commission_reports` |
+| Cash Transactions | Dividends, fees, withholding tax | `ibkr_activities` |
+| Corporate Actions | Assignments, exercises, expirations | `ibkr_activities` |
+
+### Flex Query Endpoints
+
+#### Sync Transactions from Flex
+```
+POST /api/ibkr/transactions/sync-flex
+```
+Triggers a Flex Query sync. IBKR may take 30-60 seconds to generate the report.
+
+**Request Body (optional):**
+```json
+{
+  "token": "override_token",
+  "query_id": "override_query_id",
+  "start": "2024-01-01",
+  "end": "2024-12-31",
+  "dry_run": false
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "synced_at": "2024-12-30T10:30:00",
+  "executions_upserted": 150,
+  "commission_reports_upserted": 150,
+  "activities_upserted": 45,
+  "warnings": []
+}
+```
+
+#### Get Flex Sync Status
+```
+GET /api/ibkr/flex/status
+```
+Returns the current status of Flex sync and last sync results.
+
+### Example Usage
+
+```bash
+# Sync using environment variables for credentials
+curl -X POST http://localhost:8081/api/ibkr/transactions/sync-flex
+
+# Sync with explicit credentials
+curl -X POST http://localhost:8081/api/ibkr/transactions/sync-flex \
+  -H "Content-Type: application/json" \
+  -d '{"token": "your_flex_token", "query_id": "your_query_id"}'
+
+# Dry run (parse but don't save)
+curl -X POST http://localhost:8081/api/ibkr/transactions/sync-flex \
+  -H "Content-Type: application/json" \
+  -d '{"dry_run": true}'
+```
+
+### Safe to Run Both Syncs
+
+You can safely run both real-time API sync and Flex sync:
+- All upserts use unique keys (exec_id, activity_id) to prevent duplicates
+- The `source` column distinguishes data origin: `API` vs `FLEX`
+- Flex data complements real-time data with historical events
+
+### Polling Behavior
+
+IBKR Flex Web Service works in two steps:
+1. **SendRequest**: Submit query, receive a reference code
+2. **GetStatement**: Poll until report is ready (may take 30-60 seconds)
+
+The service handles polling automatically with configurable timeouts.
+
+---
 
 ## Running Locally
 

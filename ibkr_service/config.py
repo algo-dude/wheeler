@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     service_host: str = "0.0.0.0"
     service_port: int = 8081
     
+    # Flex Web Service credentials
+    flex_token: str = ""  # IBKR Flex Web Service token
+    flex_query_id: str = ""  # Flex Query ID to execute
+    
     class Config:
         env_prefix = "IBKR_"
         case_sensitive = False

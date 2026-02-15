@@ -45,7 +45,7 @@ func (s *LongPositionService) Create(symbol string, opened time.Time, shares int
 }
 
 func (s *LongPositionService) GetBySymbol(symbol string) ([]*LongPosition, error) {
-	query := `SELECT id, symbol, opened, closed, shares, buy_price, adjusted_cost_basis_per_share, adjusted_cost_basis_total, exit_price, created_at, updated_at 
+	query := `SELECT id, symbol, opened, closed, shares, buy_price, adjusted_cost_basis_per_share, adjusted_cost_basis_total, exit_price, account, created_at, updated_at 
 			  FROM long_positions WHERE symbol = ? ORDER BY opened DESC`
 
 	rows, err := s.db.Query(query, symbol)
@@ -58,7 +58,7 @@ func (s *LongPositionService) GetBySymbol(symbol string) ([]*LongPosition, error
 	for rows.Next() {
 		var position LongPosition
 		if err := rows.Scan(&position.ID, &position.Symbol, &position.Opened, &position.Closed, &position.Shares,
-			&position.BuyPrice, &position.AdjustedCostBasisPerShare, &position.AdjustedCostBasisTotal, &position.ExitPrice, &position.CreatedAt, &position.UpdatedAt); err != nil {
+			&position.BuyPrice, &position.AdjustedCostBasisPerShare, &position.AdjustedCostBasisTotal, &position.ExitPrice, &position.Account, &position.CreatedAt, &position.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan long position: %w", err)
 		}
 		positions = append(positions, &position)
@@ -72,7 +72,7 @@ func (s *LongPositionService) GetBySymbol(symbol string) ([]*LongPosition, error
 }
 
 func (s *LongPositionService) GetAll() ([]*LongPosition, error) {
-	query := `SELECT id, symbol, opened, closed, shares, buy_price, adjusted_cost_basis_per_share, adjusted_cost_basis_total, exit_price, created_at, updated_at 
+	query := `SELECT id, symbol, opened, closed, shares, buy_price, adjusted_cost_basis_per_share, adjusted_cost_basis_total, exit_price, account, created_at, updated_at 
 			  FROM long_positions ORDER BY opened DESC`
 
 	rows, err := s.db.Query(query)
@@ -85,7 +85,7 @@ func (s *LongPositionService) GetAll() ([]*LongPosition, error) {
 	for rows.Next() {
 		var position LongPosition
 		if err := rows.Scan(&position.ID, &position.Symbol, &position.Opened, &position.Closed, &position.Shares,
-			&position.BuyPrice, &position.AdjustedCostBasisPerShare, &position.AdjustedCostBasisTotal, &position.ExitPrice, &position.CreatedAt, &position.UpdatedAt); err != nil {
+			&position.BuyPrice, &position.AdjustedCostBasisPerShare, &position.AdjustedCostBasisTotal, &position.ExitPrice, &position.Account, &position.CreatedAt, &position.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan long position: %w", err)
 		}
 		positions = append(positions, &position)
@@ -141,13 +141,13 @@ func (s *LongPositionService) Delete(symbol string, opened time.Time, shares int
 
 // GetByID retrieves a long position by its ID
 func (s *LongPositionService) GetByID(id int) (*LongPosition, error) {
-	query := `SELECT id, symbol, opened, closed, shares, buy_price, adjusted_cost_basis_per_share, adjusted_cost_basis_total, exit_price, created_at, updated_at 
+	query := `SELECT id, symbol, opened, closed, shares, buy_price, adjusted_cost_basis_per_share, adjusted_cost_basis_total, exit_price, account, created_at, updated_at 
 			  FROM long_positions WHERE id = ?`
 
 	var position LongPosition
 	err := s.db.QueryRow(query, id).Scan(
 		&position.ID, &position.Symbol, &position.Opened, &position.Closed, &position.Shares,
-		&position.BuyPrice, &position.AdjustedCostBasisPerShare, &position.AdjustedCostBasisTotal, &position.ExitPrice, &position.CreatedAt, &position.UpdatedAt,
+		&position.BuyPrice, &position.AdjustedCostBasisPerShare, &position.AdjustedCostBasisTotal, &position.ExitPrice, &position.Account, &position.CreatedAt, &position.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -373,7 +373,11 @@ func (s *LongPositionService) RecalculateAdjustedCostBasisForSymbol(symbol strin
 
 	// Apply covered call premiums to lots that were active when the calls were opened
 	for _, opt := range callOptions {
-		remainingCoverage := opt.Contracts * 100
+		absContracts := opt.Contracts
+		if absContracts < 0 {
+			absContracts = -absContracts
+		}
+		remainingCoverage := absContracts * 100
 		netPremium := netOptionPremium(opt)
 		if netPremium == 0 || remainingCoverage == 0 {
 			continue
@@ -387,7 +391,7 @@ func (s *LongPositionService) RecalculateAdjustedCostBasisForSymbol(symbol strin
 				continue
 			}
 			allocShares := minInt(remainingCoverage, p.shares)
-			allocationRatio := float64(allocShares) / float64(opt.Contracts*100)
+			allocationRatio := float64(allocShares) / float64(absContracts*100)
 			p.adjust += netPremium * allocationRatio
 			remainingCoverage -= allocShares
 		}
@@ -454,4 +458,30 @@ func (s *LongPositionService) shouldRecalculate(symbol string) (bool, error) {
 		return true, err
 	}
 	return optionCount > 0, nil
+}
+
+// GetDistinctAccounts returns all unique IBKR account IDs from long positions
+func (s *LongPositionService) GetDistinctAccounts() ([]string, error) {
+	query := `SELECT DISTINCT account FROM long_positions WHERE account IS NOT NULL AND account != '' ORDER BY account`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distinct accounts: %w", err)
+	}
+	defer rows.Close()
+
+	var accounts []string
+	for rows.Next() {
+		var account string
+		if err := rows.Scan(&account); err != nil {
+			return nil, fmt.Errorf("failed to scan account: %w", err)
+		}
+		accounts = append(accounts, account)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating accounts: %w", err)
+	}
+
+	return accounts, nil
 }

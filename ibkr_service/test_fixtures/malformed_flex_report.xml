@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryName="Malformed Test">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U1234567">
+      <Trades>
+        <!-- Missing closing tag -->
+        <Trade symbol="AAPL" quantity="100" 

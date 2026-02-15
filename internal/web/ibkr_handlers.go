@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"stonks/internal/models"
 	"stonks/internal/polygon"
 	"strconv"
 	"strings"
@@ -17,13 +18,21 @@ import (
 
 // IBKRSettingsData holds data for the IBKR settings template
 type IBKRSettingsData struct {
-	AllSymbols     []string `json:"allSymbols"`
-	CurrentDB      string   `json:"currentDB"`
-	ActivePage     string   `json:"activePage"`
-	TWS_Host       string   `json:"tws_host"`
-	TWS_Port       string   `json:"tws_port"`
-	ClientID       string   `json:"client_id"`
-	IBKRServiceURL string   `json:"ibkr_service_url"`
+	AllSymbols       []string          `json:"allSymbols"`
+	CurrentDB        string            `json:"currentDB"`
+	ActivePage       string            `json:"activePage"`
+	TWS_Host         string            `json:"tws_host"`
+	TWS_Port         string            `json:"tws_port"`
+	ClientID         string            `json:"client_id"`
+	IBKRServiceURL   string            `json:"ibkr_service_url"`
+	IBKRAccounts     []string          `json:"ibkr_accounts"`
+	AccountNicknames map[string]string `json:"account_nicknames"`
+	// Flex Query settings
+	FlexToken        string            `json:"flex_token"`
+	FlexQueryID      string            `json:"flex_query_id"`
+	FlexConfigured   bool              `json:"flex_configured"`
+	// Market Data Type setting (1=Live, 2=Frozen, 3=Delayed, 4=Delayed-frozen)
+	MarketDataType   string            `json:"market_data_type"`
 }
 
 // getIBKRServiceURL returns the URL of the IBKR microservice
@@ -82,14 +91,64 @@ func (s *Server) ibkrSettingsHandler(w http.ResponseWriter, r *http.Request) {
 
 	config := s.ibkrConnectionConfig()
 
+	// Get distinct IBKR accounts from options and long positions
+	optionAccounts, err := s.optionService.GetDistinctAccounts()
+	if err != nil {
+		log.Printf("[IBKR SETTINGS] Error getting option accounts: %v", err)
+		optionAccounts = []string{}
+	}
+	positionAccounts, err := s.longPositionService.GetDistinctAccounts()
+	if err != nil {
+		log.Printf("[IBKR SETTINGS] Error getting position accounts: %v", err)
+		positionAccounts = []string{}
+	}
+
+	// Merge and deduplicate accounts
+	accountSet := make(map[string]bool)
+	for _, acc := range optionAccounts {
+		if acc != "" {
+			accountSet[acc] = true
+		}
+	}
+	for _, acc := range positionAccounts {
+		if acc != "" {
+			accountSet[acc] = true
+		}
+	}
+	var ibkrAccounts []string
+	for acc := range accountSet {
+		ibkrAccounts = append(ibkrAccounts, acc)
+	}
+
+	// Get account nicknames
+	nicknames, err := models.GetAllAccountNicknames(s.db)
+	if err != nil {
+		log.Printf("[IBKR SETTINGS] Error getting account nicknames: %v", err)
+		nicknames = make(map[string]string)
+	}
+
+	// Get Flex Query settings
+	flexToken := s.settingService.GetValue("IBKR_FLEX_TOKEN")
+	flexQueryID := s.settingService.GetValue("IBKR_FLEX_QUERY_ID")
+	flexConfigured := flexToken != "" && flexQueryID != ""
+
+	// Get Market Data Type setting (default to "4" = delayed-frozen)
+	marketDataType := s.settingService.GetValueWithDefault("IBKR_MARKET_DATA_TYPE", "4")
+
 	data := IBKRSettingsData{
-		AllSymbols:     symbols,
-		CurrentDB:      s.getCurrentDatabaseName(),
-		ActivePage:     "settings-ibkr",
-		TWS_Host:       config.Host,
-		TWS_Port:       strconv.Itoa(config.Port),
-		ClientID:       strconv.Itoa(config.ClientID),
-		IBKRServiceURL: getIBKRServiceURL(),
+		AllSymbols:       symbols,
+		CurrentDB:        s.getCurrentDatabaseName(),
+		ActivePage:       "settings-ibkr",
+		TWS_Host:         config.Host,
+		TWS_Port:         strconv.Itoa(config.Port),
+		ClientID:         strconv.Itoa(config.ClientID),
+		IBKRServiceURL:   getIBKRServiceURL(),
+		IBKRAccounts:     ibkrAccounts,
+		AccountNicknames: nicknames,
+		FlexToken:        flexToken,
+		FlexQueryID:      flexQueryID,
+		FlexConfigured:   flexConfigured,
+		MarketDataType:   marketDataType,
 	}
 
 	s.renderTemplate(w, "settings-ibkr.html", data)
@@ -281,12 +340,103 @@ func (s *Server) ibkrStatusHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(responseBody)
 }
 
+// ibkrTransactionsSyncHandler proxies transactions sync request to IBKR microservice
+func (s *Server) ibkrTransactionsSyncHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Printf("[IBKR API] Handling sync transactions request")
+
+	// Read request body; if empty, send standard connection config.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("[IBKR API] Error reading request body: %v", err)
+		http.Error(w, "Failed to read request", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	payload := bytes.TrimSpace(body)
+	if len(payload) == 0 {
+		config := s.ibkrConnectionConfig()
+		payload, err = json.Marshal(config)
+		if err != nil {
+			log.Printf("[IBKR API] Failed to marshal config for transactions sync: %v", err)
+			http.Error(w, "Failed to marshal request", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	serviceURL := getIBKRServiceURL() + "/api/ibkr/transactions/sync"
+	resp, err := http.Post(serviceURL, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		log.Printf("[IBKR API] Error connecting to IBKR service: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"errors":  []string{"IBKR service unavailable: " + err.Error()},
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[IBKR API] Error reading response: %v", err)
+		http.Error(w, "Failed to read response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(responseBody)
+}
+
+// ibkrTransactionsStatusHandler proxies transactions status request to IBKR microservice
+func (s *Server) ibkrTransactionsStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Printf("[IBKR API] Handling transactions status request")
+
+	serviceURL := getIBKRServiceURL() + "/api/ibkr/transactions/status"
+	resp, err := http.Get(serviceURL)
+	if err != nil {
+		log.Printf("[IBKR API] Error connecting to IBKR service: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"connected":              false,
+			"last_transactions_sync": nil,
+			"database":               map[string]interface{}{"error": "IBKR service unavailable"},
+			"service_up":             false,
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[IBKR API] Error reading response: %v", err)
+		http.Error(w, "Failed to read response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(responseBody)
+}
+
 // ibkrOwnedOptionsHandler returns owned options with Greeks and surface points
 func (s *Server) ibkrOwnedOptionsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	includeLongParam := strings.TrimSpace(r.URL.Query().Get("includeLong"))
+	includeLong := strings.EqualFold(includeLongParam, "true") || includeLongParam == "1"
 
 	openOptions, err := s.optionService.GetOpen()
 	if err != nil {
@@ -309,6 +459,9 @@ func (s *Server) ibkrOwnedOptionsHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	for _, opt := range openOptions {
+		if !includeLong && opt.Contracts > 0 {
+			continue
+		}
 		view := OwnedOptionView{
 			ID:         opt.ID,
 			Symbol:     opt.Symbol,
@@ -365,6 +518,102 @@ func (s *Server) ibkrOwnedOptionsHandler(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(payload)
 }
 
+// ibkrSymbolGreeksHandler returns Greeks for a specific symbol's open options
+func (s *Server) ibkrSymbolGreeksHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	symbol := strings.TrimSpace(r.URL.Query().Get("symbol"))
+	if symbol == "" {
+		http.Error(w, "symbol parameter required", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("[IBKR API] Fetching Greeks for symbol: %s", symbol)
+
+	// Get all options for this symbol
+	options, err := s.optionService.GetBySymbol(symbol)
+	if err != nil {
+		log.Printf("[IBKR API] Error fetching options for symbol %s: %v", symbol, err)
+		http.Error(w, fmt.Sprintf("failed to fetch options: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Filter to open options only
+	var openOptions []*models.Option
+	for _, opt := range options {
+		if opt.Closed == nil {
+			openOptions = append(openOptions, opt)
+		}
+	}
+
+	payload := struct {
+		Symbol  string            `json:"symbol"`
+		Options []OwnedOptionView `json:"options"`
+		Warning string            `json:"warning,omitempty"`
+	}{
+		Symbol:  symbol,
+		Options: []OwnedOptionView{},
+	}
+
+	if len(openOptions) == 0 {
+		log.Printf("[IBKR API] No open options found for symbol: %s", symbol)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(payload)
+		return
+	}
+
+	// Fetch Greeks from IBKR service
+	ibkrGreeks, ibkrWarning := s.fetchIBKRGreeks(r.Context())
+	if ibkrWarning != "" {
+		payload.Warning = ibkrWarning
+	}
+
+	for _, opt := range openOptions {
+		view := OwnedOptionView{
+			ID:         opt.ID,
+			Symbol:     opt.Symbol,
+			Type:       opt.Type,
+			Strike:     opt.Strike,
+			Contracts:  opt.Contracts,
+			Premium:    opt.Premium,
+			Expiration: opt.Expiration.Format("2006-01-02"),
+		}
+
+		lookupKey := optionKey(view.Symbol, view.Type, view.Strike, view.Expiration)
+		if g, ok := ibkrGreeks[lookupKey]; ok {
+			view.Greeks = g.Greeks
+			view.ImpliedVol = g.ImpliedVolatility
+			view.DataSource = "IBKR"
+		}
+
+		// Fallback to Polygon if no IBKR data and Polygon service is available
+		if view.Greeks == nil && s.polygonService != nil {
+			g, gErr := s.polygonService.GetOptionGreeks(r.Context(), opt)
+			if gErr != nil {
+				log.Printf("[IBKR API] Polygon Greeks error for %s: %v", symbol, gErr)
+			}
+			if g != nil {
+				view.Greeks = g
+				view.ImpliedVol = g.ImpliedVolatility
+				view.DataSource = "Polygon"
+			}
+		}
+
+		if view.DataSource == "" {
+			view.DataSource = "Unavailable"
+		}
+
+		payload.Options = append(payload.Options, view)
+	}
+
+	log.Printf("[IBKR API] Returning Greeks for %d open options for symbol: %s", len(payload.Options), symbol)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(payload)
+}
+
 type ibkrGreekOption struct {
 	Symbol            string                `json:"symbol"`
 	Right             string                `json:"right,omitempty"`
@@ -413,6 +662,10 @@ func (s *Server) fetchIBKRGreeks(ctx context.Context) (map[string]ibkrGreekOptio
 	result := make(map[string]ibkrGreekOption)
 
 	config := s.ibkrConnectionConfig()
+	
+	// Get market data type setting (default to 4 = delayed-frozen)
+	marketDataType := s.settingService.GetValueWithDefault("IBKR_MARKET_DATA_TYPE", "4")
+	
 	query := url.Values{}
 	if config.Host != "" {
 		query.Set("host", config.Host)
@@ -423,6 +676,7 @@ func (s *Server) fetchIBKRGreeks(ctx context.Context) (map[string]ibkrGreekOptio
 	if config.ClientID > 0 {
 		query.Set("client_id", strconv.Itoa(config.ClientID))
 	}
+	query.Set("market_data_type", marketDataType)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getIBKRServiceURL()+"/api/ibkr/greeks?"+query.Encode(), nil)
 	if err != nil {
@@ -467,6 +721,141 @@ func (s *Server) fetchIBKRGreeks(ctx context.Context) (map[string]ibkrGreekOptio
 	return result, ""
 }
 
+// ibkrActivitiesDetectHandler proxies POST /api/ibkr/activities/detect to IBKR microservice
+func (s *Server) ibkrActivitiesDetectHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Printf("[IBKR API] Handling activities detect request")
+
+	// Read request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("[IBKR API] Error reading request body: %v", err)
+		http.Error(w, "Failed to read request", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	// Forward request to IBKR microservice
+	serviceURL := getIBKRServiceURL() + "/api/ibkr/activities/detect"
+	resp, err := http.Post(serviceURL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("[IBKR API] Error connecting to IBKR service: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "IBKR service unavailable: " + err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Forward response back to client
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[IBKR API] Error reading response: %v", err)
+		http.Error(w, "Failed to read response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(responseBody)
+}
+
+// ibkrCostBasisRecomputeHandler proxies POST /api/ibkr/cost-basis/recompute to IBKR microservice
+func (s *Server) ibkrCostBasisRecomputeHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Printf("[IBKR API] Handling cost-basis recompute request")
+
+	// Read request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("[IBKR API] Error reading request body: %v", err)
+		http.Error(w, "Failed to read request", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	// Forward request to IBKR microservice
+	serviceURL := getIBKRServiceURL() + "/api/ibkr/cost-basis/recompute"
+	resp, err := http.Post(serviceURL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("[IBKR API] Error connecting to IBKR service: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "IBKR service unavailable: " + err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Forward response back to client
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[IBKR API] Error reading response: %v", err)
+		http.Error(w, "Failed to read response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(responseBody)
+}
+
+// ibkrFeesUpdateHandler proxies POST /api/ibkr/fees/update to IBKR microservice
+func (s *Server) ibkrFeesUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Printf("[IBKR API] Handling fees update request")
+
+	// Read request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("[IBKR API] Error reading request body: %v", err)
+		http.Error(w, "Failed to read request", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	// Forward request to IBKR microservice
+	serviceURL := getIBKRServiceURL() + "/api/ibkr/fees/update"
+	resp, err := http.Post(serviceURL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("[IBKR API] Error connecting to IBKR service: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "IBKR service unavailable: " + err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Forward response back to client
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[IBKR API] Error reading response: %v", err)
+		http.Error(w, "Failed to read response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(responseBody)
+}
+
 // ibkrDisconnectHandler proxies disconnect request to IBKR microservice
 func (s *Server) ibkrDisconnectHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -499,5 +888,94 @@ func (s *Server) ibkrDisconnectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Write(responseBody)
+}
+
+// ibkrFlexSyncHandler proxies Flex Web Service sync request to IBKR microservice
+func (s *Server) ibkrFlexSyncHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Printf("[IBKR_FLEX] Handling Flex sync request")
+
+	// Read request body (may contain optional parameters like days_back)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("[IBKR_FLEX] Error reading request body: %v", err)
+		http.Error(w, "Failed to read request", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	payload := bytes.TrimSpace(body)
+	if len(payload) == 0 {
+		payload = []byte("{}")
+	}
+
+	// Forward request to IBKR microservice
+	serviceURL := getIBKRServiceURL() + "/api/ibkr/transactions/sync-flex"
+	resp, err := http.Post(serviceURL, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		log.Printf("[IBKR_FLEX] Error connecting to IBKR service: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"errors":  []string{"IBKR service unavailable: " + err.Error()},
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Forward response back to client
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[IBKR_FLEX] Error reading response: %v", err)
+		http.Error(w, "Failed to read response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(responseBody)
+}
+
+// ibkrFlexStatusHandler proxies Flex configuration status request to IBKR microservice
+func (s *Server) ibkrFlexStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Printf("[IBKR_FLEX] Handling Flex status request")
+
+	// Forward request to IBKR microservice
+	serviceURL := getIBKRServiceURL() + "/api/ibkr/flex/status"
+	resp, err := http.Get(serviceURL)
+	if err != nil {
+		log.Printf("[IBKR_FLEX] Error connecting to IBKR service: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"configured": false,
+			"service_up": false,
+			"flex_token": false,
+			"flex_query": false,
+			"error":      "IBKR service unavailable: " + err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Forward response back to client
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[IBKR_FLEX] Error reading response: %v", err)
+		http.Error(w, "Failed to read response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
 	w.Write(responseBody)
 }

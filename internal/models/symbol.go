@@ -36,6 +36,7 @@ type LongPosition struct {
 	AdjustedCostBasisPerShare float64    `json:"adjusted_cost_basis_per_share"`
 	AdjustedCostBasisTotal    float64    `json:"adjusted_cost_basis_total"`
 	ExitPrice                 *float64   `json:"exit_price"`
+	Account                   *string    `json:"account,omitempty"`
 	CostBasisOptions          []*Option  `json:"cost_basis_options,omitempty"`
 	CreatedAt                 time.Time  `json:"created_at"`
 	UpdatedAt                 time.Time  `json:"updated_at"`
@@ -105,6 +106,7 @@ type Option struct {
 	ExitPrice    *float64   `json:"exit_price"`
 	Commission   float64    `json:"commission"`
 	CurrentPrice *float64   `json:"current_price"`
+	Account      *string    `json:"account,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
@@ -150,7 +152,7 @@ func (o *Option) CalculateTotalProfit() float64 {
 	if o.ExitPrice != nil {
 		exitPrice = *o.ExitPrice
 	}
-	profit := math.Floor((o.Premium - exitPrice) * float64(o.Contracts) * 100)
+	profit := math.Floor((o.Premium - exitPrice) * math.Abs(float64(o.Contracts)) * 100)
 	return profit - o.Commission // Subtract commission for accurate net profit
 }
 
@@ -158,7 +160,7 @@ func (o *Option) CalculatePercentOfProfit() float64 {
 	if o.Premium == 0 {
 		return 0
 	}
-	maxProfit := o.Premium * float64(o.Contracts) * 100
+	maxProfit := o.Premium * math.Abs(float64(o.Contracts)) * 100
 	actualProfit := o.CalculateTotalProfit()
 	return (actualProfit / maxProfit) * 100
 }
@@ -211,7 +213,7 @@ func (o *Option) CalculateNetPremiumNoFees() float64 {
 	if o.ExitPrice != nil {
 		exit = *o.ExitPrice
 	}
-	return (o.Premium - exit) * float64(o.Contracts) * 100
+	return (o.Premium - exit) * math.Abs(float64(o.Contracts)) * 100
 }
 
 // CalculateAROI calculates the Annualized Return on Investment (AROI) for the option
@@ -237,11 +239,11 @@ func (o *Option) CalculateAROI() float64 {
 	var capitalBase float64
 	if o.Type == "Put" {
 		// For puts, use strike * contracts * 100 as the exposure/capital at risk
-		capitalBase = o.Strike * float64(o.Contracts) * 100
+		capitalBase = o.Strike * math.Abs(float64(o.Contracts)) * 100
 	} else if o.Type == "Call" {
 		// For calls, we need the underlying stock value, but we don't have current price here
 		// Use strike as approximation for now - this should be enhanced with current price
-		capitalBase = o.Strike * float64(o.Contracts) * 100
+		capitalBase = o.Strike * math.Abs(float64(o.Contracts)) * 100
 	}
 
 	if capitalBase <= 0 {

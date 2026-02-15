@@ -112,8 +112,8 @@ func TestSymbolDataStructure(t *testing.T) {
 			if option.Premium <= 0 {
 				t.Errorf("Option %d premium should be positive, got %f", i, option.Premium)
 			}
-			if option.Contracts <= 0 {
-				t.Errorf("Option %d contracts should be positive, got %d", i, option.Contracts)
+			if option.Contracts == 0 {
+				t.Errorf("Option %d contracts should be non-zero, got %d", i, option.Contracts)
 			}
 			
 			// Test AROI calculation

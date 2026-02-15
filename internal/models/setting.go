@@ -179,3 +179,68 @@ func (s *Setting) GetDescriptionAsString() string {
 	}
 	return *s.Description
 }
+
+// GetAccountNickname returns the nickname for a given IBKR account ID
+func GetAccountNickname(db *sql.DB, accountID string) (string, error) {
+	var nickname string
+	err := db.QueryRow("SELECT nickname FROM account_nicknames WHERE account_id = ?", accountID).Scan(&nickname)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil // No nickname set, return empty string
+		}
+		return "", fmt.Errorf("failed to get account nickname: %w", err)
+	}
+	return nickname, nil
+}
+
+// SetAccountNickname sets or updates the nickname for a given IBKR account ID
+func SetAccountNickname(db *sql.DB, accountID, nickname string) error {
+	accountID = strings.TrimSpace(accountID)
+	nickname = strings.TrimSpace(nickname)
+
+	if accountID == "" {
+		return fmt.Errorf("account ID cannot be empty")
+	}
+
+	if nickname == "" {
+		// If nickname is empty, delete the entry
+		_, err := db.Exec("DELETE FROM account_nicknames WHERE account_id = ?", accountID)
+		if err != nil {
+			return fmt.Errorf("failed to delete account nickname: %w", err)
+		}
+		return nil
+	}
+
+	// Upsert the nickname
+	_, err := db.Exec(`INSERT INTO account_nicknames (account_id, nickname) VALUES (?, ?)
+		ON CONFLICT(account_id) DO UPDATE SET nickname = excluded.nickname`,
+		accountID, nickname)
+	if err != nil {
+		return fmt.Errorf("failed to set account nickname: %w", err)
+	}
+	return nil
+}
+
+// GetAllAccountNicknames returns a map of account IDs to their nicknames
+func GetAllAccountNicknames(db *sql.DB) (map[string]string, error) {
+	rows, err := db.Query("SELECT account_id, nickname FROM account_nicknames")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get account nicknames: %w", err)
+	}
+	defer rows.Close()
+
+	nicknames := make(map[string]string)
+	for rows.Next() {
+		var accountID, nickname string
+		if err := rows.Scan(&accountID, &nickname); err != nil {
+			return nil, fmt.Errorf("failed to scan account nickname: %w", err)
+		}
+		nicknames[accountID] = nickname
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating account nicknames: %w", err)
+	}
+
+	return nicknames, nil
+}

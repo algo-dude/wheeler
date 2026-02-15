@@ -1,9 +1,11 @@
 .claude
+
 data/backups
 data/test_db.db
 data/wheeler.*
 data/integration_test.db*
 data/currentdb
+docs/*
 
 # Build artifacts
 stonks
@@ -18,3 +20,9 @@ __pycache__/
 env/
 venv/
 .env
+
+# IBKR service local dev
+ibkr_service/.venv/
+ibkr_service/.env.local
+
+

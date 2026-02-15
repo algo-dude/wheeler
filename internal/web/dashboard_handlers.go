@@ -2,7 +2,9 @@ package web
 
 import (
 	"encoding/json"
+	"io"
 	"log"
+	"math"
 	"net/http"
 	"sort"
 	"stonks/internal/models"
@@ -19,10 +21,13 @@ func (s *Server) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	// Sort symbols alphabetically for consistent legend colors across charts
 	sort.Strings(symbols)
 
+	// Parse selected accounts from query parameters
+	selectedAccounts := r.URL.Query()["account"]
+
 	log.Printf("[DASHBOARD] Found %d symbols for navigation: %v", len(symbols), symbols)
 
 	// Build comprehensive dashboard data
-	data, err := s.buildDashboardData(symbols)
+	data, err := s.buildDashboardData(symbols, selectedAccounts)
 	if err != nil {
 		log.Printf("Error building dashboard data: %v", err)
 		// Fallback to basic data structure
@@ -38,12 +43,65 @@ func (s *Server) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildDashboardData creates comprehensive dashboard data
-func (s *Server) buildDashboardData(symbols []string) (DashboardData, error) {
+func (s *Server) buildDashboardData(symbols []string, selectedAccounts []string) (DashboardData, error) {
 	// Get all data
 	options, _ := s.optionService.GetAll()
 	longPositions, _ := s.longPositionService.GetAll()
 	dividends, _ := s.dividendService.GetAll()
 	treasuries, _ := s.treasuryService.GetAll()
+
+	// Get distinct IBKR accounts from both options and long positions
+	optionAccounts, _ := s.optionService.GetDistinctAccounts()
+	positionAccounts, _ := s.longPositionService.GetDistinctAccounts()
+
+	// Merge and deduplicate accounts
+	accountSet := make(map[string]bool)
+	for _, acc := range optionAccounts {
+		accountSet[acc] = true
+	}
+	for _, acc := range positionAccounts {
+		accountSet[acc] = true
+	}
+	var ibkrAccounts []string
+	for acc := range accountSet {
+		ibkrAccounts = append(ibkrAccounts, acc)
+	}
+	sort.Strings(ibkrAccounts)
+
+	hasIBKRData := len(ibkrAccounts) > 0
+
+	// Get account nicknames
+	accountNicknames, err := models.GetAllAccountNicknames(s.db)
+	if err != nil {
+		log.Printf("[DASHBOARD] Error getting account nicknames: %v", err)
+		accountNicknames = make(map[string]string)
+	}
+
+	// Filter options and long positions by selected accounts if any are selected
+	if len(selectedAccounts) > 0 {
+		selectedSet := make(map[string]bool)
+		for _, acc := range selectedAccounts {
+			selectedSet[acc] = true
+		}
+
+		var filteredOptions []*models.Option
+		for _, opt := range options {
+			// Include options without account (manual entries) or matching selected accounts
+			if opt.Account == nil || *opt.Account == "" || selectedSet[*opt.Account] {
+				filteredOptions = append(filteredOptions, opt)
+			}
+		}
+		options = filteredOptions
+
+		var filteredPositions []*models.LongPosition
+		for _, pos := range longPositions {
+			// Include positions without account (manual entries) or matching selected accounts
+			if pos.Account == nil || *pos.Account == "" || selectedSet[*pos.Account] {
+				filteredPositions = append(filteredPositions, pos)
+			}
+		}
+		longPositions = filteredPositions
+	}
 
 	// Build symbol summaries
 	symbolSummaries := s.buildSymbolSummaries(symbols, options, longPositions, dividends)
@@ -56,20 +114,78 @@ func (s *Server) buildDashboardData(symbols []string) (DashboardData, error) {
 	// Calculate totals
 	totals := s.calculateDashboardTotals(symbolSummaries, treasuries)
 
+	// Fetch margin data from IBKR status if available
+	accountMargins, totalMargin := s.fetchMarginData()
+
 	log.Printf("[DASHBOARD] Building dashboard data with %d symbols: %v", len(symbols), symbols)
 	log.Printf("[DASHBOARD] Built %d symbol summaries", len(symbolSummaries))
 
 	return DashboardData{
-		Symbols:         symbols,
-		AllSymbols:      symbols, // For navigation compatibility
-		SymbolSummaries: symbolSummaries,
-		LongByTicker:    longByTicker,
-		PutsByTicker:    putsByTicker,
-		TotalAllocation: totalAllocation,
-		Totals:          totals,
-		CurrentDB:       s.getCurrentDatabaseName(),
-		ActivePage:      "dashboard",
+		Symbols:          symbols,
+		AllSymbols:       symbols, // For navigation compatibility
+		SymbolSummaries:  symbolSummaries,
+		LongByTicker:     longByTicker,
+		PutsByTicker:     putsByTicker,
+		TotalAllocation:  totalAllocation,
+		Totals:           totals,
+		CurrentDB:        s.getCurrentDatabaseName(),
+		ActivePage:       "dashboard",
+		IBKRAccounts:     ibkrAccounts,
+		SelectedAccounts: selectedAccounts,
+		HasIBKRData:      hasIBKRData,
+		AccountNicknames: accountNicknames,
+		AccountMargins:   accountMargins,
+		TotalMargin:      totalMargin,
 	}, nil
+}
+
+// fetchMarginData retrieves maintenance margin data from IBKR status endpoint
+func (s *Server) fetchMarginData() (map[string]float64, float64) {
+	accountMargins := make(map[string]float64)
+	var totalMargin float64
+
+	// Call IBKR status endpoint
+	serviceURL := getIBKRServiceURL() + "/api/ibkr/status"
+	resp, err := http.Get(serviceURL)
+	if err != nil {
+		log.Printf("[DASHBOARD] Error fetching IBKR status for margin: %v", err)
+		return accountMargins, totalMargin
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[DASHBOARD] Error reading IBKR status response: %v", err)
+		return accountMargins, totalMargin
+	}
+
+	// Parse the status response - account_summary is now keyed by account ID
+	var statusResp struct {
+		AccountSummary map[string]map[string]struct {
+			Value    float64 `json:"value"`
+			Currency string  `json:"currency"`
+		} `json:"account_summary"`
+	}
+	if err := json.Unmarshal(body, &statusResp); err != nil {
+		log.Printf("[DASHBOARD] Error parsing IBKR status response: %v", err)
+		return accountMargins, totalMargin
+	}
+
+	// Extract MaintMarginReq per account
+	if statusResp.AccountSummary != nil {
+		for account, values := range statusResp.AccountSummary {
+			if margin, ok := values["MaintMarginReq"]; ok {
+				accountMargins[account] = margin.Value
+				totalMargin += margin.Value
+				log.Printf("[DASHBOARD] Account %s maintenance margin: $%.2f", account, margin.Value)
+			}
+		}
+		if totalMargin > 0 {
+			log.Printf("[DASHBOARD] Total maintenance margin: $%.2f", totalMargin)
+		}
+	}
+
+	return accountMargins, totalMargin
 }
 
 func (s *Server) buildSymbolSummaries(symbols []string, options []*models.Option, longPositions []*models.LongPosition, dividends []*models.Dividend) []SymbolSummary {
@@ -111,7 +227,7 @@ func (s *Server) buildSymbolSummaries(symbols []string, options []*models.Option
 			if opt.Type == "Put" {
 				// Count put exposure for all open puts
 				if opt.Closed == nil {
-					summary.PutExposed += opt.Strike * float64(opt.Contracts) * 100
+					summary.PutExposed += opt.Strike * math.Abs(float64(opt.Contracts)) * 100
 				}
 				// Count premium for all puts (closed and open)
 				premium := opt.CalculateTotalProfit()
@@ -199,7 +315,7 @@ func (s *Server) buildPutsByTickerChart(options []*models.Option) []ChartData {
 
 	for _, opt := range options {
 		if opt.Type == "Put" && opt.Closed == nil { // Only include open puts
-			putExposure[opt.Symbol] += opt.Strike * float64(opt.Contracts) * 100
+			putExposure[opt.Symbol] += opt.Strike * math.Abs(float64(opt.Contracts)) * 100
 		}
 	}
 
@@ -235,7 +351,7 @@ func (s *Server) buildTotalAllocationChart(longPositions []*models.LongPosition,
 	// Only count open put options for current exposure
 	for _, opt := range options {
 		if opt.Type == "Put" && opt.Closed == nil {
-			totalPuts += opt.Strike * float64(opt.Contracts) * 100
+			totalPuts += opt.Strike * math.Abs(float64(opt.Contracts)) * 100
 		}
 	}
 
@@ -315,7 +431,7 @@ func (s *Server) premiumDataHandler(w http.ResponseWriter, r *http.Request) {
 
 	var putPremium, callPremium float64
 	for _, option := range options {
-		totalPremium := option.Premium * float64(option.Contracts) * 100
+		totalPremium := option.Premium * math.Abs(float64(option.Contracts)) * 100
 
 		if option.Type == "Put" {
 			putPremium += totalPremium
@@ -389,12 +505,12 @@ func (s *Server) allocationDataHandler(w http.ResponseWriter, r *http.Request) {
 	for _, opt := range options {
 		if opt.Closed == nil { // Only open options
 			if opt.Type == "Put" {
-				exposure := opt.Strike * float64(opt.Contracts) * 100
+				exposure := opt.Strike * math.Abs(float64(opt.Contracts)) * 100
 				totalPuts += exposure
 				putsByTicker[opt.Symbol] += exposure
-				totalPutPremiums += opt.Premium * float64(opt.Contracts) * 100
+				totalPutPremiums += opt.Premium * math.Abs(float64(opt.Contracts)) * 100
 			} else if opt.Type == "Call" {
-				totalCallPremiums += opt.Premium * float64(opt.Contracts) * 100
+				totalCallPremiums += opt.Premium * math.Abs(float64(opt.Contracts)) * 100
 				callCoverage[opt.Symbol] = true
 			}
 		}

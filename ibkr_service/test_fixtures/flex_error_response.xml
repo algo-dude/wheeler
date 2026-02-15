@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatementResponse>
+  <Status>1</Status>
+  <ErrorCode>1003</ErrorCode>
+  <ErrorMessage>Invalid token - please check your Flex Web Service token</ErrorMessage>
+</FlexStatementResponse>

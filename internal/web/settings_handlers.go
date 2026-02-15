@@ -213,3 +213,71 @@ func (s *Server) deleteSettingAPI(w http.ResponseWriter, r *http.Request, name s
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// AccountNicknameRequest represents the request body for setting an account nickname
+type AccountNicknameRequest struct {
+	AccountID string `json:"account_id"`
+	Nickname  string `json:"nickname"`
+}
+
+// accountNicknamesAPIHandler handles GET requests for all account nicknames
+func (s *Server) accountNicknamesAPIHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Printf("[SETTINGS API] Handling GET /api/account-nicknames")
+
+	nicknames, err := models.GetAllAccountNicknames(s.db)
+	if err != nil {
+		log.Printf("[SETTINGS API] Error getting account nicknames: %v", err)
+		http.Error(w, "Failed to get account nicknames", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(nicknames); err != nil {
+		log.Printf("[SETTINGS API] Error encoding account nicknames response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// accountNicknameAPIHandler handles POST requests to set an account nickname
+func (s *Server) accountNicknameAPIHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Printf("[SETTINGS API] Handling POST /api/account-nickname")
+
+	var req AccountNicknameRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[SETTINGS API] Error decoding account nickname request: %v", err)
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if strings.TrimSpace(req.AccountID) == "" {
+		http.Error(w, "Account ID is required", http.StatusBadRequest)
+		return
+	}
+
+	err := models.SetAccountNickname(s.db, req.AccountID, req.Nickname)
+	if err != nil {
+		log.Printf("[SETTINGS API] Error setting account nickname: %v", err)
+		http.Error(w, "Failed to set account nickname", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[SETTINGS API] Successfully set nickname for account %s: %s", req.AccountID, req.Nickname)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"account_id": req.AccountID,
+		"nickname":   req.Nickname,
+		"status":     "success",
+	})
+}

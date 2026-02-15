@@ -427,6 +427,12 @@ func (s *Server) setupRoutes() {
 	http.HandleFunc("/api/settings/", s.individualSettingAPIHandler)
 	log.Printf("[SERVER] Route registered: /api/settings/ -> individualSettingAPIHandler")
 
+	http.HandleFunc("/api/account-nicknames", s.accountNicknamesAPIHandler)
+	log.Printf("[SERVER] Route registered: /api/account-nicknames -> accountNicknamesAPIHandler")
+
+	http.HandleFunc("/api/account-nickname", s.accountNicknameAPIHandler)
+	log.Printf("[SERVER] Route registered: /api/account-nickname -> accountNicknameAPIHandler")
+
 	http.HandleFunc("/api/polygon/test", s.polygonTestHandler)
 	log.Printf("[SERVER] Route registered: /api/polygon/test -> polygonTestHandler")
 
@@ -454,11 +460,35 @@ func (s *Server) setupRoutes() {
 	http.HandleFunc("/api/ibkr/status", s.ibkrStatusHandler)
 	log.Printf("[SERVER] Route registered: /api/ibkr/status -> ibkrStatusHandler")
 
+	http.HandleFunc("/api/ibkr/transactions/sync", s.ibkrTransactionsSyncHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/transactions/sync -> ibkrTransactionsSyncHandler")
+
+	http.HandleFunc("/api/ibkr/transactions/status", s.ibkrTransactionsStatusHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/transactions/status -> ibkrTransactionsStatusHandler")
+
+	http.HandleFunc("/api/ibkr/activities/detect", s.ibkrActivitiesDetectHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/activities/detect -> ibkrActivitiesDetectHandler")
+
+	http.HandleFunc("/api/ibkr/cost-basis/recompute", s.ibkrCostBasisRecomputeHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/cost-basis/recompute -> ibkrCostBasisRecomputeHandler")
+
+	http.HandleFunc("/api/ibkr/fees/update", s.ibkrFeesUpdateHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/fees/update -> ibkrFeesUpdateHandler")
+
 	http.HandleFunc("/api/ibkr/owned-options", s.ibkrOwnedOptionsHandler)
 	log.Printf("[SERVER] Route registered: /api/ibkr/owned-options -> ibkrOwnedOptionsHandler")
 
+	http.HandleFunc("/api/ibkr/symbol-greeks", s.ibkrSymbolGreeksHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/symbol-greeks -> ibkrSymbolGreeksHandler")
+
 	http.HandleFunc("/api/ibkr/disconnect", s.ibkrDisconnectHandler)
 	log.Printf("[SERVER] Route registered: /api/ibkr/disconnect -> ibkrDisconnectHandler")
+
+	http.HandleFunc("/api/ibkr/transactions/sync-flex", s.ibkrFlexSyncHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/transactions/sync-flex -> ibkrFlexSyncHandler")
+
+	http.HandleFunc("/api/ibkr/flex/status", s.ibkrFlexStatusHandler)
+	log.Printf("[SERVER] Route registered: /api/ibkr/flex/status -> ibkrFlexStatusHandler")
 
 	log.Printf("[SERVER] All routes registered successfully")
 }

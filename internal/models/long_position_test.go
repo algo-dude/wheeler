@@ -28,7 +28,9 @@ func setupLongPositionTestDB(t *testing.T) *sql.DB {
 		premium REAL NOT NULL,
 		contracts INTEGER NOT NULL,
 		exit_price REAL,
-		commission REAL DEFAULT 0.0
+		commission REAL DEFAULT 0.0,
+		current_price REAL,
+		account TEXT
 	);
 
 	CREATE TABLE long_positions (
@@ -41,6 +43,7 @@ func setupLongPositionTestDB(t *testing.T) *sql.DB {
 		adjusted_cost_basis_per_share REAL NOT NULL DEFAULT 0.0,
 		adjusted_cost_basis_total REAL NOT NULL DEFAULT 0.0,
 		exit_price REAL,
+		account TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);

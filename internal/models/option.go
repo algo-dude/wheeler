@@ -47,7 +47,7 @@ func (s *OptionService) CreateWithCommission(symbol, optionType string, opened t
 }
 
 func (s *OptionService) GetBySymbol(symbol string) ([]*Option, error) {
-	query := `SELECT id, symbol, type, opened, closed, strike, expiration, premium, contracts, exit_price, commission, current_price, created_at, updated_at 
+	query := `SELECT id, symbol, type, opened, closed, strike, expiration, premium, contracts, exit_price, commission, current_price, account, created_at, updated_at 
 			  FROM options WHERE symbol = ? ORDER BY expiration DESC, opened DESC`
 
 	rows, err := s.db.Query(query, symbol)
@@ -61,7 +61,7 @@ func (s *OptionService) GetBySymbol(symbol string) ([]*Option, error) {
 		var option Option
 		if err := rows.Scan(&option.ID, &option.Symbol, &option.Type, &option.Opened, &option.Closed,
 			&option.Strike, &option.Expiration, &option.Premium, &option.Contracts,
-			&option.ExitPrice, &option.Commission, &option.CurrentPrice, &option.CreatedAt, &option.UpdatedAt); err != nil {
+			&option.ExitPrice, &option.Commission, &option.CurrentPrice, &option.Account, &option.CreatedAt, &option.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan option: %w", err)
 		}
 		options = append(options, &option)
@@ -75,7 +75,7 @@ func (s *OptionService) GetBySymbol(symbol string) ([]*Option, error) {
 }
 
 func (s *OptionService) GetAll() ([]*Option, error) {
-	query := `SELECT id, symbol, type, opened, closed, strike, expiration, premium, contracts, exit_price, commission, current_price, created_at, updated_at 
+	query := `SELECT id, symbol, type, opened, closed, strike, expiration, premium, contracts, exit_price, commission, current_price, account, created_at, updated_at 
 			  FROM options ORDER BY expiration DESC, opened DESC`
 
 	rows, err := s.db.Query(query)
@@ -89,7 +89,7 @@ func (s *OptionService) GetAll() ([]*Option, error) {
 		var option Option
 		if err := rows.Scan(&option.ID, &option.Symbol, &option.Type, &option.Opened, &option.Closed,
 			&option.Strike, &option.Expiration, &option.Premium, &option.Contracts,
-			&option.ExitPrice, &option.Commission, &option.CurrentPrice, &option.CreatedAt, &option.UpdatedAt); err != nil {
+			&option.ExitPrice, &option.Commission, &option.CurrentPrice, &option.Account, &option.CreatedAt, &option.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan option: %w", err)
 		}
 		options = append(options, &option)
@@ -103,7 +103,7 @@ func (s *OptionService) GetAll() ([]*Option, error) {
 }
 
 func (s *OptionService) GetOpen() ([]*Option, error) {
-	query := `SELECT id, symbol, type, opened, closed, strike, expiration, premium, contracts, exit_price, commission, current_price, created_at, updated_at 
+	query := `SELECT id, symbol, type, opened, closed, strike, expiration, premium, contracts, exit_price, commission, current_price, account, created_at, updated_at 
 			  FROM options WHERE closed IS NULL ORDER BY expiration ASC`
 
 	rows, err := s.db.Query(query)
@@ -117,7 +117,7 @@ func (s *OptionService) GetOpen() ([]*Option, error) {
 		var option Option
 		if err := rows.Scan(&option.ID, &option.Symbol, &option.Type, &option.Opened, &option.Closed,
 			&option.Strike, &option.Expiration, &option.Premium, &option.Contracts,
-			&option.ExitPrice, &option.Commission, &option.CurrentPrice, &option.CreatedAt, &option.UpdatedAt); err != nil {
+			&option.ExitPrice, &option.Commission, &option.CurrentPrice, &option.Account, &option.CreatedAt, &option.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan option: %w", err)
 		}
 		options = append(options, &option)
@@ -176,14 +176,14 @@ func (s *OptionService) Delete(symbol, optionType string, opened time.Time, stri
 
 // GetByID retrieves an option by its ID
 func (s *OptionService) GetByID(id int) (*Option, error) {
-	query := `SELECT id, symbol, type, opened, closed, strike, expiration, premium, contracts, exit_price, commission, current_price, created_at, updated_at 
+	query := `SELECT id, symbol, type, opened, closed, strike, expiration, premium, contracts, exit_price, commission, current_price, account, created_at, updated_at 
 			  FROM options WHERE id = ?`
 
 	var option Option
 	err := s.db.QueryRow(query, id).Scan(
 		&option.ID, &option.Symbol, &option.Type, &option.Opened, &option.Closed,
 		&option.Strike, &option.Expiration, &option.Premium, &option.Contracts,
-		&option.ExitPrice, &option.Commission, &option.CurrentPrice, &option.CreatedAt, &option.UpdatedAt,
+		&option.ExitPrice, &option.Commission, &option.CurrentPrice, &option.Account, &option.CreatedAt, &option.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -204,13 +204,13 @@ func (s *OptionService) UpdateByID(id int, symbol, optionType string, opened tim
 	query := `UPDATE options 
 			  SET symbol = ?, type = ?, opened = ?, strike = ?, expiration = ?, premium = ?, contracts = ?, commission = ?, closed = ?, exit_price = ?, updated_at = CURRENT_TIMESTAMP 
 			  WHERE id = ? 
-			  RETURNING id, symbol, type, opened, closed, strike, expiration, premium, contracts, exit_price, commission, current_price, created_at, updated_at`
+			  RETURNING id, symbol, type, opened, closed, strike, expiration, premium, contracts, exit_price, commission, current_price, account, created_at, updated_at`
 
 	var option Option
 	err := s.db.QueryRow(query, symbol, optionType, opened, strike, expiration, premium, contracts, commission, closed, exitPrice, id).Scan(
 		&option.ID, &option.Symbol, &option.Type, &option.Opened, &option.Closed,
 		&option.Strike, &option.Expiration, &option.Premium, &option.Contracts,
-		&option.ExitPrice, &option.Commission, &option.CurrentPrice, &option.CreatedAt, &option.UpdatedAt,
+		&option.ExitPrice, &option.Commission, &option.CurrentPrice, &option.Account, &option.CreatedAt, &option.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -414,6 +414,32 @@ func (s *OptionService) GetOptionsSummaryTotals() (*OptionSummary, error) {
 	}
 
 	return &totals, nil
+}
+
+// GetDistinctAccounts returns all unique IBKR account IDs from options
+func (s *OptionService) GetDistinctAccounts() ([]string, error) {
+	query := `SELECT DISTINCT account FROM options WHERE account IS NOT NULL AND account != '' ORDER BY account`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distinct accounts: %w", err)
+	}
+	defer rows.Close()
+
+	var accounts []string
+	for rows.Next() {
+		var account string
+		if err := rows.Scan(&account); err != nil {
+			return nil, fmt.Errorf("failed to scan account: %w", err)
+		}
+		accounts = append(accounts, account)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating accounts: %w", err)
+	}
+
+	return accounts, nil
 }
 
 // Index creates a nested index structure for all options

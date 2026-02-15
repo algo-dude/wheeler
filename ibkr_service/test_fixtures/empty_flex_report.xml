@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryName="Empty Test Query" type="AF">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U9999999" fromDate="2024-12-01" toDate="2024-12-30">
+      <Trades>
+      </Trades>
+      <CashTransactions>
+      </CashTransactions>
+      <CorporateActions>
+      </CorporateActions>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

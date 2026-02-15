@@ -99,6 +99,41 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Market Data Type Setting -->
+                <div class="settings-form-container">
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <i class="fas fa-chart-line"></i>
+                            <h3>Market Data Type</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <form id="marketDataTypeForm">
+                                <div class="form-group">
+                                    <label for="marketDataType" class="form-label">Data Type for Greeks Requests</label>
+                                    <select id="marketDataType" class="form-input">
+                                        <option value="1" {{if eq .MarketDataType "1"}}selected{{end}}>1 = Live (real-time, requires market data subscription)</option>
+                                        <option value="2" {{if eq .MarketDataType "2"}}selected{{end}}>2 = Frozen (last value at close, requires subscription)</option>
+                                        <option value="3" {{if eq .MarketDataType "3"}}selected{{end}}>3 = Delayed (15-20 min delay, free during market hours)</option>
+                                        <option value="4" {{if or (eq .MarketDataType "4") (eq .MarketDataType "")}}selected{{end}}>4 = Delayed-frozen (last delayed value, free - recommended)</option>
+                                    </select>
+                                    <div class="form-help">
+                                        <i class="fas fa-info-circle"></i>
+                                        Select market data type for IBKR Greeks requests. Use "Delayed" (3) during market hours or "Delayed-frozen" (4) after hours if you don't have live market data subscriptions. Users with paid subscriptions can use "Live" (1).
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <div class="form-actions">
+                                        <button type="submit" class="btn btn-primary" id="saveMarketDataTypeBtn">
+                                            <i class="fas fa-save"></i>
+                                            Save Market Data Type
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
                 
                 <!-- Sync Results -->
                 <div class="settings-form-container" id="syncResultsContainer" style="display: none;">
@@ -115,12 +150,161 @@
                     </div>
                 </div>
 
+                <!-- Flex Query Configuration -->
+                <div class="settings-form-container">
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <i class="fas fa-file-invoice"></i>
+                            <h3>Flex Query Configuration</h3>
+                            {{if .FlexConfigured}}
+                            <span class="flex-status-badge configured">
+                                <i class="fas fa-check-circle"></i> Configured
+                            </span>
+                            {{else}}
+                            <span class="flex-status-badge not-configured">
+                                <i class="fas fa-exclamation-circle"></i> Not Configured
+                            </span>
+                            {{end}}
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="status-description" style="margin-bottom: 15px;">
+                                Use IBKR Flex Web Service to sync historical transactions without a live TWS/Gateway connection.
+                            </div>
+                            <form id="flexConfigForm">
+                                <div class="form-group">
+                                    <label for="flexToken" class="form-label">Flex Token</label>
+                                    <input type="password" id="flexToken" class="form-input" 
+                                           placeholder="Enter your Flex Web Service token"
+                                           value="{{.FlexToken}}"
+                                           autocomplete="off">
+                                    <div class="form-help">
+                                        <i class="fas fa-info-circle"></i>
+                                        Your Flex Web Service token from IBKR Account Management
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="flexQueryId" class="form-label">Flex Query ID</label>
+                                    <input type="text" id="flexQueryId" class="form-input" 
+                                           placeholder="Enter your Flex Query ID (e.g., 123456)"
+                                           value="{{.FlexQueryID}}">
+                                    <div class="form-help">
+                                        <i class="fas fa-info-circle"></i>
+                                        The numeric Query ID for your Flex Query
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <div class="form-actions">
+                                        <button type="submit" class="btn btn-primary" id="saveFlexConfigBtn">
+                                            <i class="fas fa-save"></i>
+                                            Save Flex Settings
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                            
+                            <!-- Flex Status -->
+                            <div class="api-status" id="flexConnectionStatus">
+                                <div class="status-indicator" id="flexStatusIndicator">
+                                    <i class="fas fa-circle" id="flexStatusIcon"></i>
+                                    <span id="flexStatusText">{{if .FlexConfigured}}Flex Query configured{{else}}Not configured{{end}}</span>
+                                </div>
+                                <div class="status-description" id="flexStatusDescription">
+                                    {{if .FlexConfigured}}Click "Test Flex Connection" to verify your settings.{{else}}Enter your Flex Token and Query ID above to enable Flex sync.{{end}}
+                                </div>
+                            </div>
+                            
+                            <!-- Flex Actions -->
+                            <div class="api-actions">
+                                <button type="button" class="btn btn-secondary" id="testFlexBtn" {{if not .FlexConfigured}}disabled{{end}}>
+                                    <i class="fas fa-flask"></i>
+                                    Test Flex Connection
+                                </button>
+                                <button type="button" class="btn btn-primary" id="syncFlexBtn" {{if not .FlexConfigured}}disabled{{end}}>
+                                    <i class="fas fa-sync-alt"></i>
+                                    Sync Flex Report
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Flex Query Setup Help -->
+                <div class="info-section">
+                    <div class="info-card">
+                        <div class="info-header">
+                            <i class="fas fa-question-circle"></i>
+                            <h4>How to Create a Flex Query</h4>
+                        </div>
+                        <div class="info-content">
+                            <p>To use Flex Web Service sync, you need to create a Flex Query in IBKR Account Management:</p>
+                            <ol>
+                                <li>Log in to <a href="https://www.interactivebrokers.com/portal" target="_blank" rel="noopener">IBKR Account Management</a></li>
+                                <li>Go to <strong>Reports → Flex Queries</strong></li>
+                                <li>Click <strong>"+" (Create)</strong> under Activity Flex Query</li>
+                                <li>Configure the query:
+                                    <ul>
+                                        <li><strong>Query Name:</strong> Wheeler Sync (or any name)</li>
+                                        <li><strong>Date Period:</strong> Last 365 Days (or desired range)</li>
+                                        <li><strong>Sections:</strong> Enable <em>Trades</em> and <em>Cash Transactions</em></li>
+                                        <li><strong>Format:</strong> XML</li>
+                                    </ul>
+                                </li>
+                                <li>Save the query and note the <strong>Query ID</strong></li>
+                                <li>Go to <strong>Settings → Flex Web Service</strong></li>
+                                <li>Generate or copy your <strong>Flex Token</strong></li>
+                            </ol>
+                            <p><strong>Note:</strong> Flex queries run against historical data and don't require a live TWS/Gateway connection.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Account Nicknames -->
+                {{if .IBKRAccounts}}
+                <div class="settings-form-container">
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <i class="fas fa-user-tag"></i>
+                            <h3>Account Nicknames</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="status-description" style="margin-bottom: 15px;">
+                                Set friendly names for your IBKR accounts to make them easier to identify in filters.
+                            </div>
+                            <div class="account-nicknames-list">
+                                {{range $account := .IBKRAccounts}}
+                                <div class="account-nickname-row" data-account="{{$account}}">
+                                    <div class="account-id">
+                                        <i class="fas fa-building-columns"></i>
+                                        <span>{{$account}}</span>
+                                    </div>
+                                    <div class="nickname-input-group">
+                                        <input type="text" 
+                                               class="form-input nickname-input" 
+                                               placeholder="Enter nickname (e.g., Roth IRA)"
+                                               value="{{index $.AccountNicknames $account}}"
+                                               data-account="{{$account}}">
+                                        <button type="button" class="btn btn-sm btn-primary save-nickname-btn" data-account="{{$account}}">
+                                            <i class="fas fa-save"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                {{end}}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+
                 <!-- Owned Options with Greeks -->
                 <div class="settings-form-container">
                     <div class="settings-card">
                         <div class="settings-card-header">
                             <i class="fas fa-superscript"></i>
                             <h3>Owned Options (Greeks &amp; Vol Surface)</h3>
+                            <label style="margin-left: 12px; display:flex; align-items:center; gap: 6px;">
+                                <input type="checkbox" id="includeLongOwnedOptions" />
+                                <span>Include long options</span>
+                            </label>
                         </div>
                         <div class="settings-card-body">
                             <div class="status-description" id="ownedOptionsStatus">Loading owned options...</div>
@@ -390,6 +574,127 @@
             color: #888;
             margin-top: 5px;
         }
+
+        /* Account Nicknames Styles */
+        .account-nicknames-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .account-nickname-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            padding: 12px;
+            background: #1e1e1e;
+            border-radius: 6px;
+            border: 1px solid #404040;
+        }
+
+        .account-id {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #e0e0e0;
+            font-family: monospace;
+            font-size: 14px;
+            min-width: 120px;
+        }
+
+        .account-id i {
+            color: #3498db;
+        }
+
+        .nickname-input-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            max-width: 350px;
+        }
+
+        .nickname-input {
+            flex: 1;
+            padding: 8px 12px;
+            background: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        .nickname-input:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .nickname-input::placeholder {
+            color: #666;
+        }
+
+        .btn-sm {
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+
+        .save-nickname-btn {
+            white-space: nowrap;
+        }
+
+        .save-nickname-btn.saved {
+            background-color: #27ae60;
+        }
+
+        .save-nickname-btn.saving {
+            opacity: 0.7;
+            cursor: wait;
+        }
+
+        /* Flex Query Styles */
+        .flex-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-left: auto;
+        }
+
+        .flex-status-badge.configured {
+            background-color: rgba(39, 174, 96, 0.2);
+            color: #27ae60;
+        }
+
+        .flex-status-badge.not-configured {
+            background-color: rgba(231, 76, 60, 0.2);
+            color: #e74c3c;
+        }
+
+        .flex-status-badge i {
+            font-size: 10px;
+        }
+
+        .info-content ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+
+        .info-content ol li {
+            margin: 8px 0;
+        }
+
+        .info-content a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        .info-content a:hover {
+            text-decoration: underline;
+        }
     </style>
 
     <script>
@@ -399,7 +704,346 @@
         document.addEventListener('DOMContentLoaded', function() {
             checkStatus();
             loadOwnedOptions();
+            initAccountNicknames();
+            initFlexConfig();
+            initMarketDataType();
         });
+
+        // Initialize Market Data Type configuration
+        function initMarketDataType() {
+            document.getElementById('marketDataTypeForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveMarketDataType();
+            });
+        }
+
+        function saveMarketDataType() {
+            const btn = document.getElementById('saveMarketDataTypeBtn');
+            const marketDataType = document.getElementById('marketDataType').value;
+            
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+            fetch('/api/settings/IBKR_MARKET_DATA_TYPE', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    value: marketDataType, 
+                    description: 'IBKR market data type (1=Live, 2=Frozen, 3=Delayed, 4=Delayed-frozen)' 
+                })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to save setting');
+                return response.json();
+            })
+            .then(() => {
+                showNotification('Market data type saved successfully!', 'success');
+            })
+            .catch(error => {
+                console.error('Error saving market data type:', error);
+                showNotification('Error saving market data type: ' + error.message, 'error');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        }
+
+        // Initialize Flex Query configuration
+        function initFlexConfig() {
+            // Save Flex configuration
+            document.getElementById('flexConfigForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveFlexConfig();
+            });
+
+            // Test Flex connection
+            document.getElementById('testFlexBtn').addEventListener('click', function() {
+                testFlexConnection();
+            });
+
+            // Sync Flex report
+            document.getElementById('syncFlexBtn').addEventListener('click', function() {
+                syncFlexReport();
+            });
+
+            // Enable/disable buttons based on input
+            const flexToken = document.getElementById('flexToken');
+            const flexQueryId = document.getElementById('flexQueryId');
+            
+            function updateFlexButtons() {
+                const hasConfig = flexToken.value.trim() && flexQueryId.value.trim();
+                document.getElementById('testFlexBtn').disabled = !hasConfig;
+                document.getElementById('syncFlexBtn').disabled = !hasConfig;
+            }
+
+            flexToken.addEventListener('input', updateFlexButtons);
+            flexQueryId.addEventListener('input', updateFlexButtons);
+        }
+
+        function saveFlexConfig() {
+            const btn = document.getElementById('saveFlexConfigBtn');
+            const flexToken = document.getElementById('flexToken').value.trim();
+            const flexQueryId = document.getElementById('flexQueryId').value.trim();
+            
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+            // Save both settings
+            Promise.all([
+                fetch('/api/settings/IBKR_FLEX_TOKEN', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: flexToken, description: 'IBKR Flex Web Service token' })
+                }),
+                fetch('/api/settings/IBKR_FLEX_QUERY_ID', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: flexQueryId, description: 'IBKR Flex Query ID' })
+                })
+            ])
+            .then(responses => {
+                const allOk = responses.every(r => r.ok);
+                if (!allOk) {
+                    throw new Error('Failed to save one or more settings');
+                }
+                return Promise.all(responses.map(r => r.json()));
+            })
+            .then(() => {
+                showNotification('Flex settings saved successfully!', 'success');
+                updateFlexStatusDisplay(flexToken && flexQueryId);
+            })
+            .catch(error => {
+                console.error('Error saving Flex config:', error);
+                showNotification('Error saving Flex settings: ' + error.message, 'error');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        }
+
+        function updateFlexStatusDisplay(configured) {
+            const statusIndicator = document.getElementById('flexStatusIndicator');
+            const statusText = document.getElementById('flexStatusText');
+            const statusDescription = document.getElementById('flexStatusDescription');
+            const statusContainer = document.getElementById('flexConnectionStatus');
+            
+            // Update badge in header
+            const badge = document.querySelector('.flex-status-badge');
+            if (badge) {
+                if (configured) {
+                    badge.className = 'flex-status-badge configured';
+                    badge.innerHTML = '<i class="fas fa-check-circle"></i> Configured';
+                } else {
+                    badge.className = 'flex-status-badge not-configured';
+                    badge.innerHTML = '<i class="fas fa-exclamation-circle"></i> Not Configured';
+                }
+            }
+
+            // Update status section
+            statusContainer.classList.remove('connected', 'disconnected', 'checking');
+            statusIndicator.classList.remove('connected', 'disconnected', 'checking');
+            
+            if (configured) {
+                statusText.textContent = 'Flex Query configured';
+                statusDescription.textContent = 'Click "Test Flex Connection" to verify your settings.';
+            } else {
+                statusText.textContent = 'Not configured';
+                statusDescription.textContent = 'Enter your Flex Token and Query ID above to enable Flex sync.';
+            }
+
+            // Enable/disable buttons
+            document.getElementById('testFlexBtn').disabled = !configured;
+            document.getElementById('syncFlexBtn').disabled = !configured;
+        }
+
+        function testFlexConnection() {
+            const btn = document.getElementById('testFlexBtn');
+            const statusIndicator = document.getElementById('flexStatusIndicator');
+            const statusText = document.getElementById('flexStatusText');
+            const statusDescription = document.getElementById('flexStatusDescription');
+            const statusContainer = document.getElementById('flexConnectionStatus');
+            
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+
+            // Show checking state
+            statusContainer.classList.remove('connected', 'disconnected');
+            statusContainer.classList.add('checking');
+            statusIndicator.classList.remove('connected', 'disconnected');
+            statusIndicator.classList.add('checking');
+            statusText.textContent = 'Testing Flex connection...';
+            statusDescription.textContent = 'Verifying credentials with IBKR Flex Web Service...';
+
+            fetch('/api/ibkr/flex/status')
+                .then(response => response.json())
+                .then(data => {
+                    statusContainer.classList.remove('checking');
+                    statusIndicator.classList.remove('checking');
+
+                    if (data.success || data.configured) {
+                        statusContainer.classList.add('connected');
+                        statusIndicator.classList.add('connected');
+                        statusText.textContent = 'Flex connection verified';
+                        statusDescription.textContent = data.message || 'Your Flex Query credentials are valid.';
+                        showNotification('Flex connection test successful!', 'success');
+                    } else {
+                        statusContainer.classList.add('disconnected');
+                        statusIndicator.classList.add('disconnected');
+                        statusText.textContent = 'Connection failed';
+                        statusDescription.textContent = data.error || data.message || 'Unable to verify Flex credentials.';
+                        showNotification('Flex test failed: ' + (data.error || data.message || 'Unknown error'), 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error testing Flex connection:', error);
+                    statusContainer.classList.remove('checking');
+                    statusContainer.classList.add('disconnected');
+                    statusIndicator.classList.remove('checking');
+                    statusIndicator.classList.add('disconnected');
+                    statusText.textContent = 'Service unavailable';
+                    statusDescription.textContent = 'IBKR service is not running or cannot be reached.';
+                    showNotification('Error testing Flex connection: ' + error.message, 'error');
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                });
+        }
+
+        function syncFlexReport() {
+            const btn = document.getElementById('syncFlexBtn');
+            
+            if (!confirm('This will sync transactions from your IBKR Flex Query. This may take a few moments. Continue?')) {
+                return;
+            }
+            
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+
+            fetch('/api/ibkr/transactions/sync-flex', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const msg = `Flex sync completed! Executions: ${data.executions_synced || 0}, Activities: ${data.activities_synced || 0}`;
+                    showNotification(msg, 'success');
+                    
+                    // Show sync results if container exists
+                    if (data.executions_synced !== undefined || data.activities_synced !== undefined) {
+                        showFlexSyncResults(data);
+                    }
+                } else {
+                    showNotification('Flex sync failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error syncing Flex report:', error);
+                showNotification('Error syncing Flex report: ' + error.message, 'error');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        }
+
+        function showFlexSyncResults(result) {
+            const container = document.getElementById('syncResultsContainer');
+            const resultsDiv = document.getElementById('syncResults');
+            
+            container.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div class="sync-stat">
+                    <div class="sync-stat-value">${result.executions_synced || 0}</div>
+                    <div class="sync-stat-label">Executions Synced</div>
+                </div>
+                <div class="sync-stat">
+                    <div class="sync-stat-value">${result.activities_synced || 0}</div>
+                    <div class="sync-stat-label">Activities Synced</div>
+                </div>
+                <div class="sync-stat">
+                    <div class="sync-stat-value">${result.commissions_synced || 0}</div>
+                    <div class="sync-stat-label">Commissions Synced</div>
+                </div>
+                ${result.errors && result.errors.length > 0 ? `
+                <div class="sync-stat" style="grid-column: span 2;">
+                    <div class="sync-stat-value error">${result.errors.length}</div>
+                    <div class="sync-stat-label">Errors</div>
+                </div>
+                ` : ''}
+            `;
+        }
+
+        // Initialize account nickname save buttons
+        function initAccountNicknames() {
+            document.querySelectorAll('.save-nickname-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const accountId = this.dataset.account;
+                    const input = document.querySelector(`.nickname-input[data-account="${accountId}"]`);
+                    const nickname = input.value.trim();
+                    
+                    saveAccountNickname(accountId, nickname, this);
+                });
+            });
+
+            // Also save on Enter key
+            document.querySelectorAll('.nickname-input').forEach(input => {
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        const accountId = this.dataset.account;
+                        const btn = document.querySelector(`.save-nickname-btn[data-account="${accountId}"]`);
+                        saveAccountNickname(accountId, this.value.trim(), btn);
+                    }
+                });
+            });
+        }
+
+        function saveAccountNickname(accountId, nickname, btn) {
+            btn.disabled = true;
+            btn.classList.add('saving');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            fetch('/api/account-nickname', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ account_id: accountId, nickname: nickname })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to save nickname');
+                }
+                return response.json();
+            })
+            .then(data => {
+                btn.classList.remove('saving');
+                btn.classList.add('saved');
+                btn.innerHTML = '<i class="fas fa-check"></i>';
+                
+                setTimeout(() => {
+                    btn.classList.remove('saved');
+                    btn.innerHTML = originalHTML;
+                }, 1500);
+
+                showNotification(`Nickname ${nickname ? 'saved' : 'cleared'} for ${accountId}`, 'success');
+            })
+            .catch(error => {
+                console.error('Error saving nickname:', error);
+                btn.classList.remove('saving');
+                btn.innerHTML = originalHTML;
+                showNotification('Error saving nickname: ' + error.message, 'error');
+            })
+            .finally(() => {
+                btn.disabled = false;
+            });
+        }
 
         function formatGreek(value, decimals = 4) {
             if (value === null || value === undefined || isNaN(value)) {
@@ -525,7 +1169,9 @@
         }
 
         function loadOwnedOptions() {
-            fetch('/api/ibkr/owned-options')
+            const includeLong = document.getElementById('includeLongOwnedOptions')?.checked;
+            const url = includeLong ? '/api/ibkr/owned-options?includeLong=true' : '/api/ibkr/owned-options';
+            fetch(url)
                 .then(resp => resp.json())
                 .then(data => {
                     renderOwnedOptionsTable(data.options || []);
@@ -539,6 +1185,10 @@
                     document.getElementById('ownedOptionsStatus').textContent = 'Failed to load owned options.';
                 });
         }
+
+        document.getElementById('includeLongOwnedOptions')?.addEventListener('change', () => {
+            loadOwnedOptions();
+        });
 
         function checkStatus() {
             const statusIndicator = document.querySelector('.status-indicator');
@@ -755,6 +1405,11 @@
         });
 
         function showNotification(message, type) {
+            if (type === 'error' && window.WheelerNotifications && typeof window.WheelerNotifications.addError === 'function') {
+                window.WheelerNotifications.addError(message);
+                return;
+            }
+
             const notification = document.createElement('div');
             notification.className = `notification ${type}`;
             notification.innerHTML = `

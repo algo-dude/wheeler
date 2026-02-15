@@ -174,7 +174,8 @@ docker compose down
 
 ### IBKR Integration Status
 - IBKR Greeks/IV sourcing and per-row data source tagging were added in `eda4138`.
-- **Cost basis, assignment detection, and fee ingestion from IBKR transactions are not yet implemented.** Track this follow-up work in `docs/ibkr-cost-basis-assignments-fees.md`.
+- **Flex Query Support**: Import historical transactions, assignments, exercises, and fees via IBKR Flex Web Service (no TWS required). See `ibkr_service/README.md` for setup.
+- **Cost basis construction from IBKR transactions is not yet implemented.** Track this follow-up work in `docs/ibkr-cost-basis-assignments-fees.md`.
 
 ## Database Management
 
